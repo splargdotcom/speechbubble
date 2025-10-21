@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speech Bubble Designer</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    const SpeechBubble = ({ 
+      text, 
+      tailAngle = 270, 
+      width = 400, 
+      height = 300,
+      shape = 'pill',
+      fontFamily = 'Arial',
+      tailWidthPercent = 25,
+      tailLengthPercent = 15,
+      textSize = 32,
+      tailCurve = 0,
+      leftTailCurve = 0,
+      rightTailCurve = 0,
+      tailTipX = 0,
+      tailTipY = 0,
+      useTailPosition = false,
+      strokeWidth = 3,
+      lineSpacing = 1.25,
+      textOffsetX = 0,
+      textOffsetY = 0,
+      isItalic = false,
+      isThoughtBubble = false
+    }) => {
+      const tailLength = Math.max(width, height) * (tailLengthPercent / 100);
+      const tailBaseWidth = Math.max(width, height) * (tailWidthPercent / 100);
+      
+      const angleRad = (tailAngle * Math.PI) / 180;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      const getEdgePoint = (angle, inset = 0) => {
+        if (shape === 'circle') {
+          const radius = Math.min(width, height) / 2 - inset;
+          return {
+            x: centerX + Math.cos(angle) * radius,
+            y: centerY + Math.sin(angle) * radius
+          };
+        } else if (shape === 'pill') {
+          const radiusX = width / 2 - inset;
+          const radiusY = height / 2 - inset;
+          const cosA = Math.cos(angle);
+          const sinA = Math.sin(angle);
+          const scale = Math.sqrt(1 / ((cosA * cosA) / (radiusX * radiusX) + (sinA * sinA) / (radiusY * radiusY)));
+          return {
+            x: centerX + cosA * scale,
+            y: centerY + sinA * scale
+          };
+        } else {
+          const rectWidth = width * 0.9 - inset * 2;
+          const rectHeight = height * 0.9 - inset * 2;
+          const halfW = rectWidth / 2;
+          const halfH = rectHeight / 2;
+          
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          
+          const tX = cos !== 0 ? halfW / Math.abs(cos) : Infinity;
+          const tY = sin !== 0 ? halfH / Math.abs(sin) : Infinity;
+          const t = Math.min(tX, tY);
+          
+          return {
+            x: centerX + cos * t,
+            y: centerY + sin * t
+          };
+        }
+      };
+      
+      const edgePoint = getEdgePoint(angleRad);
+      const distanceToEdge = Math.sqrt(Math.pow(edgePoint.x - centerX, 2) + Math.pow(edgePoint.y - centerY, 2));
+      const tailWidthAngle = (tailBaseWidth / distanceToEdge) / 2;
+      
+      const leftBaseAngle = angleRad - tailWidthAngle;
+      const rightBaseAngle = angleRad + tailWidthAngle;
+      
+      const leftBase = getEdgePoint(leftBaseAngle, 0);
+      const rightBase = getEdgePoint(rightBaseAngle, 0);
+      
+      const baseTipX = centerX + Math.cos(angleRad) * (distanceToEdge + tailLength);
+      const baseTipY = centerY + Math.sin(angleRad) * (distanceToEdge + tailLength);
+      
+      const tipX = useTailPosition ? baseTipX + tailTipX : baseTipX;
+      const tipY = useTailPosition ? baseTipY + tailTipY : baseTipY;
+      
+      const perpAngle = angleRad + Math.PI / 2;
+      
+      const totalLeftCurve = tailCurve + leftTailCurve;
+      const totalRightCurve = tailCurve + rightTailCurve;
+      
+      const leftCurveControlX = leftBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalLeftCurve;
+      const leftCurveControlY = leftBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalLeftCurve;
+      const rightCurveControlX = rightBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalRightCurve;
+      const rightCurveControlY = rightBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalRightCurve;
+      
+      const minTipWidth = tailBaseWidth * 0.02;
+      const tipWidthAngle = (minTipWidth / (distanceToEdge + tailLength)) / 2;
+      const leftTipAngle = angleRad - tipWidthAngle;
+      const rightTipAngle = angleRad + tipWidthAngle;
+      
+      const leftTipX = centerX + Math.cos(leftTipAngle) * (distanceToEdge + tailLength);
+      const leftTipY = centerY + Math.sin(leftTipAngle) * (distanceToEdge + tailLength);
+      const rightTipX = centerX + Math.cos(rightTipAngle) * (distanceToEdge + tailLength);
+      const rightTipY = centerY + Math.sin(rightTipAngle) * (distanceToEdge + tailLength);
+      
+      const createCombinedPath = () => {
+        if (isThoughtBubble) {
+          if (shape === 'circle' || shape === 'pill') {
+            const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
+            const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
+            
+            const numScallops = 12;
+            const scallops = [];
+            
+            for (let i = 0; i < numScallops; i++) {
+              const angle1 = (i / numScallops) * 2 * Math.PI;
+              const angle2 = ((i + 1) / numScallops) * 2 * Math.PI;
+              
+              const x1 = centerX + Math.cos(angle1) * rx * 0.95;
+              const y1 = centerY + Math.sin(angle1) * ry * 0.95;
+              const x2 = centerX + Math.cos(angle2) * rx * 0.95;
+              const y2 = centerY + Math.sin(angle2) * ry * 0.95;
+              
+              const midAngle = (angle1 + angle2) / 2;
+              const bulgeX = centerX + Math.cos(midAngle) * Math.max(rx, ry) * 1.05;
+              const bulgeY = centerY + Math.sin(midAngle) * Math.max(rx, ry) * 1.05;
+              
+              if (i === 0) {
+                scallops.push(`M ${x1} ${y1}`);
+              }
+              scallops.push(`Q ${bulgeX} ${bulgeY} ${x2} ${y2}`);
+            }
+            
+            return scallops.join(' ') + ' Z';
+          } else {
+            const rectWidth = width * 0.9;
+            const rectHeight = height * 0.9;
+            const rectX = width * 0.05;
+            const rectY = height * 0.05;
+            
+            const numScallops = 8;
+            const scallops = [];
+            
+            for (let i = 0; i < numScallops; i++) {
+              const progress = i / numScallops;
+              let x1, y1, x2, y2, bulgeX, bulgeY;
+              
+              if (progress < 0.25) {
+                const p = progress * 4;
+                x1 = rectX + rectWidth * p;
+                y1 = rectY;
+                x2 = rectX + rectWidth * ((i + 1) / numScallops * 4);
+                y2 = rectY;
+                bulgeX = (x1 + x2) / 2;
+                bulgeY = rectY - 20;
+              } else if (progress < 0.5) {
+                const p = (progress - 0.25) * 4;
+                x1 = rectX + rectWidth;
+                y1 = rectY + rectHeight * p;
+                x2 = rectX + rectWidth;
+                y2 = rectY + rectHeight * ((i + 1) / numScallops - 0.25) * 4;
+                bulgeX = rectX + rectWidth + 20;
+                bulgeY = (y1 + y2) / 2;
+              } else if (progress < 0.75) {
+                const p = (progress - 0.5) * 4;
+                x1 = rectX + rectWidth * (1 - p);
+                y1 = rectY + rectHeight;
+                x2 = rectX + rectWidth * (1 - ((i + 1) / numScallops - 0.5) * 4);
+                y2 = rectY + rectHeight;
+                bulgeX = (x1 + x2) / 2;
+                bulgeY = rectY + rectHeight + 20;
+              } else {
+                const p = (progress - 0.75) * 4;
+                x1 = rectX;
+                y1 = rectY + rectHeight * (1 - p);
+                x2 = rectX;
+                y2 = rectY + rectHeight * (1 - ((i + 1) / numScallops - 0.75) * 4);
+                bulgeX = rectX - 20;
+                bulgeY = (y1 + y2) / 2;
+              }
+              
+              if (i === 0) {
+                scallops.push(`M ${x1} ${y1}`);
+              }
+              scallops.push(`Q ${bulgeX} ${bulgeY} ${x2} ${y2}`);
+            }
+            
+            return scallops.join(' ') + ' Z';
+          }
+        }
+        
+        if (shape === 'circle' || shape === 'pill') {
+          const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
+          const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
+          
+          const startAngle = leftBaseAngle;
+          const endAngle = rightBaseAngle;
+          
+          let tailSectionAngle = endAngle - startAngle;
+          if (tailSectionAngle < 0) tailSectionAngle += 2 * Math.PI;
+          
+          const largeArcFlag = tailSectionAngle < Math.PI ? 1 : 0;
+          
+          if (tailCurve !== 0 || leftTailCurve !== 0 || rightTailCurve !== 0) {
+            return `
+              M ${leftBase.x} ${leftBase.y}
+              Q ${leftCurveControlX} ${leftCurveControlY} ${leftTipX} ${leftTipY}
+              L ${rightTipX} ${rightTipY}
+              Q ${rightCurveControlX} ${rightCurveControlY} ${rightBase.x} ${rightBase.y}
+              A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y}
+              Z
+            `;
+          } else {
+            return `
+              M ${leftBase.x} ${leftBase.y}
+              L ${tipX} ${tipY}
+              L ${rightBase.x} ${rightBase.y}
+              A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y}
+              Z
+            `;
+          }
+        } else {
+          const rectWidth = width * 0.9;
+          const rectHeight = height * 0.9;
+          const rectX = width * 0.05;
+          const rectY = height * 0.05;
+          const cornerRadius = 30;
+          
+          return `
+            M ${rectX + cornerRadius} ${rectY}
+            L ${rectX + rectWidth - cornerRadius} ${rectY}
+            Q ${rectX + rectWidth} ${rectY} ${rectX + rectWidth} ${rectY + cornerRadius}
+            L ${rectX + rectWidth} ${rectY + rectHeight - cornerRadius}
+            Q ${rectX + rectWidth} ${rectY + rectHeight} ${rectX + rectWidth - cornerRadius} ${rectY + rectHeight}
+            L ${rectX + cornerRadius} ${rectY + rectHeight}
+            Q ${rectX} ${rectY + rectHeight} ${rectX} ${rectY + rectHeight - cornerRadius}
+            L ${rectX} ${rectY + cornerRadius}
+            Q ${rectX} ${rectY} ${rectX + cornerRadius} ${rectY}
+            Z
+            M ${leftBase.x} ${leftBase.y}
+            L ${tipX} ${tipY}
+            L ${rightBase.x} ${rightBase.y}
+            Z
+          `;
+        }
+      };
+      
+      const svgSize = Math.max(width, height) + tailLength * 2 + 100;
+      const offsetX = (svgSize - width) / 2;
+      const offsetY = (svgSize - height) / 2;
+      
+      return (
+        <svg 
+          width={svgSize} 
+          height={svgSize} 
+          viewBox={`0 0 ${svgSize} ${svgSize}`}
+          style={{ overflow: 'visible' }}
+        >
+          <g transform={`translate(${offsetX}, ${offsetY})`}>
+            <path
+              d={createCombinedPath()}
+              fill="white"
+              stroke="black"
+              strokeWidth={strokeWidth}
+              strokeLinejoin="round"
+            />
+            
+            {isThoughtBubble && (
+              <>
+                <circle
+                  cx={tipX * 0.7 + centerX * 0.3}
+                  cy={tipY * 0.7 + centerY * 0.3}
+                  r={Math.max(width, height) * 0.04}
+                  fill="white"
+                  stroke="black"
+                  strokeWidth={strokeWidth}
+                />
+                <circle
+                  cx={tipX * 0.85 + centerX * 0.15}
+                  cy={tipY * 0.85 + centerY * 0.15}
+                  r={Math.max(width, height) * 0.025}
+                  fill="white"
+                  stroke="black"
+                  strokeWidth={strokeWidth}
+                />
+              </>
+            )}
+            
+            <text
+              x={centerX + textOffsetX}
+              y={centerY + textOffsetY}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={textSize}
+              fontWeight="bold"
+              fontFamily={fontFamily}
+              fontStyle={isItalic ? 'italic' : 'normal'}
+            >
+              {text.split('\n').map((line, i, arr) => {
+                const parts = [];
+                let currentText = '';
+                let isInItalic = false;
+                let charIndex = 0;
+                
+                while (charIndex < line.length) {
+                  if (line[charIndex] === '*') {
+                    if (currentText) {
+                      parts.push({ text: currentText, italic: isInItalic });
+                      currentText = '';
+                    }
+                    isInItalic = !isInItalic;
+                    charIndex++;
+                  } else {
+                    currentText += line[charIndex];
+                    charIndex++;
+                  }
+                }
+                
+                if (currentText) {
+                  parts.push({ text: currentText, italic: isInItalic });
+                }
+                
+                return (
+                  <tspan
+                    key={i}
+                    x={centerX + textOffsetX}
+                    dy={i === 0 ? -((arr.length - 1) * (textSize * 0.6)) : textSize * lineSpacing}
+                  >
+                    {parts.map((part, partIndex) => (
+                      <tspan
+                        key={partIndex}
+                        fontStyle={part.italic ? 'italic' : (isItalic ? 'italic' : 'normal')}
+                      >
+                        {part.text}
+                      </tspan>
+                    ))}
+                  </tspan>
+                );
+              })}
+            </text>
+          </g>
+        </svg>
+      );
+    };
+
+    function App() {
+      const [angle, setAngle] = useState(270);
+      const [shape, setShape] = useState('pill');
+      const [font, setFont] = useState('Arial');
+      const [lines, setLines] = useState(3);
+      const [customText, setCustomText] = useState(['WHO\'S', 'SORRY', 'NOW?']);
+      const [size, setSize] = useState(300);
+      const [tailWidth, setTailWidth] = useState(10);
+      const [tailLength, setTailLength] = useState(15);
+      const [aspectRatio, setAspectRatio] = useState(1.33);
+      const [textSize, setTextSize] = useState(32);
+      const [tailCurve, setTailCurve] = useState(0);
+      const [leftTailCurve, setLeftTailCurve] = useState(0);
+      const [rightTailCurve, setRightTailCurve] = useState(0);
+      const [useTailPosition, setUseTailPosition] = useState(false);
+      const [tailTipX, setTailTipX] = useState(0);
+      const [tailTipY, setTailTipY] = useState(0);
+      const [strokeWidth, setStrokeWidth] = useState(3);
+      const [lineSpacing, setLineSpacing] = useState(1.25);
+      const [textOffsetX, setTextOffsetX] = useState(0);
+      const [textOffsetY, setTextOffsetY] = useState(0);
+      const [isItalic, setIsItalic] = useState(false);
+      const [isThoughtBubble, setIsThoughtBubble] = useState(false);
+      
+      const fonts = [
+        'Arial',
+        'Georgia',
+        'Courier New',
+        'Comic Sans MS',
+        'Impact',
+        'Times New Roman',
+        'Verdana'
+      ];
+      
+      const shapes = [
+        { value: 'pill', label: 'Pill' },
+        { value: 'circle', label: 'Circle' },
+        { value: 'rectangle', label: 'Rectangle' }
+      ];
+      
+      const handleTextChange = (index, value) => {
+        const newText = [...customText];
+        newText[index] = value;
+        setCustomText(newText);
+      };
+      
+      const handleLinesChange = (newLines) => {
+        setLines(newLines);
+        if (newLines > customText.length) {
+          setCustomText([...customText, ...Array(newLines - customText.length).fill('')]);
+        } else {
+          setCustomText(customText.slice(0, newLines));
+        }
+      };
+      
+      const displayText = customText.slice(0, lines).join('\n');
+      
+      const width = shape === 'circle' ? size : size * aspectRatio;
+      const height = size;
+      
+      const downloadPNG = () => {
+        const svgElement = document.querySelector('svg');
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        const svgSize = Math.max(width, height) + (Math.max(width, height) * (tailLength / 100)) * 2 + 100;
+        canvas.width = svgSize;
+        canvas.height = svgSize;
+        
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = 'speech-bubble.png';
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+          });
+        };
+        
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+      };
+      
+      return (
+        <div className="min-h-screen bg-gray-100 p-8">
+          <div className="max-w-7xl mx-auto bg-white rounded-lg shadow-lg p-8">
+            <h1 className="text-3xl font-bold mb-6 text-center">
+              Speech Bubble Designer
+            </h1>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="space-y-6">
+                <div>
+                  <button
+                    onClick={downloadPNG}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition text-lg"
+                  >
+                    Download as PNG
+                  </button>
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Text Size: {textSize}px
+                  </label>
+                  <input
+                    type="range"
+                    min="16"
+                    max="72"
+                    value={textSize}
+                    onChange={(e) => setTextSize(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Line Spacing: {lineSpacing.toFixed(2)}
+                  </label>
+                  <input
+                    type="range"
+                    min="0.8"
+                    max="2"
+                    step="0.05"
+                    value={lineSpacing}
+                    onChange={(e) => setLineSpacing(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Text Position X: {textOffsetX}px
+                  </label>
+                  <input
+                    type="range"
+                    min="-100"
+                    max="100"
+                    value={textOffsetX}
+                    onChange={(e) => setTextOffsetX(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Text Position Y: {textOffsetY}px
+                  </label>
+                  <input
+                    type="range"
+                    min="-100"
+                    max="100"
+                    value={textOffsetY}
+                    onChange={(e) => setTextOffsetY(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Line Thickness: {strokeWidth}px
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={strokeWidth}
+                    onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Font Family
+                  </label>
+                  <select
+                    value={font}
+                    onChange={(e) => setFont(e.target.value)}
+                    className="w-full p-3 border-2 border-gray-300 rounded-lg text-lg"
+                  >
+                    {fonts.map((f) => (
+                      <option key={f} value={f} style={{ fontFamily: f }}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="flex items-center gap-2 text-lg font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isItalic}
+                      onChange={(e) => setIsItalic(e.target.checked)}
+                      className="w-5 h-5 cursor-pointer"
+                    />
+                    Italic Text (All)
+                  </label>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Tip: Use *asterisks* around words for individual italic text
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="flex items-center gap-2 text-lg font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isThoughtBubble}
+                      onChange={(e) => setIsThoughtBubble(e.target.checked)}
+                      className="w-5 h-5 cursor-pointer"
+                    />
+                    Thought Bubble Style
+                  </label>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Creates a cloudy bubble with thought circles
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Number of Lines: {lines}
+                  </label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => handleLinesChange(num)}
+                        className={`flex-1 py-2 px-4 rounded-lg font-semibold transition ${
+                          lines === num
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 hover:bg-gray-300'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Text Content
+                  </label>
+                  <div className="space-y-2">
+                    {Array.from({ length: lines }).map((_, i) => (
+                      <input
+                        key={i}
+                        type="text"
+                        value={customText[i] || ''}
+                        onChange={(e) => handleTextChange(i, e.target.value)}
+                        placeholder={`Line ${i + 1}`}
+                        className="w-full p-3 border-2 border-gray-300 rounded-lg text-lg"
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="lg:col-span-2 space-y-6">
+                <div>
+                  <label className="block text-lg font-semibold mb-2">
+                    Bubble Shape
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {shapes.map((s) => (
+                      <button
+                        key={s.value}
+                        onClick={() => setShape(s.value)}
+                        className={`py-2 px-4 rounded-lg font-semibold transition ${
+                          shape === s.value
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 hover:bg-gray-300'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-center bg-gray-50 rounded-lg p-8 min-h-[400px]">
+                  <SpeechBubble 
+                    text={displayText}
+                    tailAngle={angle}
+                    width={width}
+                    height={height}
+                    shape={shape}
+                    fontFamily={font}
+                    tailWidthPercent={tailWidth}
+                    tailLengthPercent={tailLength}
+                    textSize={textSize}
+                    tailCurve={tailCurve}
+                    leftTailCurve={leftTailCurve}
+                    rightTailCurve={rightTailCurve}
+                    useTailPosition={useTailPosition}
+                    tailTipX={tailTipX}
+                    tailTipY={tailTipY}
+                    strokeWidth={strokeWidth}
+                    lineSpacing={lineSpacing}
+                    textOffsetX={textOffsetX}
+                    textOffsetY={textOffsetY}
+                    isItalic={isItalic}
+                    isThoughtBubble={isThoughtBubble}
+                  />
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useTailPosition}
+                        onChange={(e) => setUseTailPosition(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                      Enable Tail Tip Offset (X/Y adjustments)
+                    </label>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Tail Angle: {angle}°
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        value={angle}
+                        onChange={(e) => setAngle(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Tail Length: {tailLength}%
+                      </label>
+                      <input
+                        type="range"
+                        min="5"
+                        max="60"
+                        value={tailLength}
+                        onChange={(e) => setTailLength(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    {useTailPosition && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            Tail Tip X Offset: {tailTipX}px
+                          </label>
+                          <input
+                            type="range"
+                            min="-200"
+                            max="200"
+                            value={tailTipX}
+                            onChange={(e) => setTailTipX(Number(e.target.value))}
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            Tail Tip Y Offset: {tailTipY}px
+                          </label>
+                          <input
+                            type="range"
+                            min="-200"
+                            max="200"
+                            value={tailTipY}
+                            onChange={(e) => setTailTipY(Number(e.target.value))}
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                      </>
+                    )}
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Bubble Size: {size}px
+                      </label>
+                      <input
+                        type="range"
+                        min="150"
+                        max="500"
+                        value={size}
+                        onChange={(e) => setSize(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Tail Width: {tailWidth}%
+                      </label>
+                      <input
+                        type="range"
+                        min="5"
+                        max="20"
+                        value={tailWidth}
+                        onChange={(e) => setTailWidth(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Tail Curve (Both): {tailCurve}
+                      </label>
+                      <input
+                        type="range"
+                        min="-50"
+                        max="50"
+                        value={tailCurve}
+                        onChange={(e) => setTailCurve(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Left Tail Curve: {leftTailCurve}
+                      </label>
+                      <input
+                        type="range"
+                        min="-50"
+                        max="50"
+                        value={leftTailCurve}
+                        onChange={(e) => setLeftTailCurve(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Right Tail Curve: {rightTailCurve}
+                      </label>
+                      <input
+                        type="range"
+                        min="-50"
+                        max="50"
+                        value={rightTailCurve}
+                        onChange={(e) => setRightTailCurve(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Bubble Shape: {aspectRatio === 1 ? 'Circle' : aspectRatio < 1.15 ? 'Round' : aspectRatio < 1.5 ? 'Oval' : aspectRatio < 2 ? 'Wide' : 'Tube'} ({aspectRatio.toFixed(2)}:1)
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="3"
+                        step="0.05"
+                        value={aspectRatio}
+                        onChange={(e) => setAspectRatio(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        disabled={shape === 'circle'}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
