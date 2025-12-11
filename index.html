@@ -85,7 +85,7 @@
       tailWidthPercent = 25, tailLengthPercent = 15, textSize = 32, tailCurve = 0, leftTailCurve = 0,
       rightTailCurve = 0, tailTipX = 0, tailTipY = 0, useTailPosition = false, strokeWidth = 3,
       lineSpacing = 1.25, textOffsetX = 0, textOffsetY = 0, isItalic = false, isThoughtBubble = false,
-      svgRef // Received Ref here
+      svgRef // <-- NEW: Accepting the ref
     }) => {
       const tailLength = Math.max(width, height) * (tailLengthPercent / 100);
       const tailBaseWidth = Math.max(width, height) * (tailWidthPercent / 100);
@@ -220,6 +220,7 @@
             return `M ${leftBase.x} ${leftBase.y} L ${tipX} ${tipY} L ${rightBase.x} ${rightBase.y} A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y} Z`;
           }
         } else {
+          // Rectangle logic (sticker style for stability)
           const rectWidth = width * 0.9;
           const rectHeight = height * 0.9;
           const rectX = width * 0.05;
@@ -235,7 +236,7 @@
       
       return (
         <svg 
-          ref={svgRef} 
+          ref={svgRef} // <-- NEW: Ref attached here
           width={svgSize} 
           height={svgSize} 
           viewBox={`0 0 ${svgSize} ${svgSize}`} 
@@ -302,7 +303,7 @@
       const [isItalic, setIsItalic] = useState(false);
       const [isThoughtBubble, setIsThoughtBubble] = useState(false);
       
-      const svgRef = useRef(null);
+      const svgRef = useRef(null); // <-- NEW: Creating the Ref
       
       // UI States
       const [activeTab, setActiveTab] = useState('content');
@@ -330,7 +331,7 @@
       };
 
       const downloadPNG = () => {
-        const svgElement = svgRef.current; // Use the Ref, not querySelector
+        const svgElement = svgRef.current; // <-- NEW: Using Ref instead of querySelector
         if (!svgElement) return;
 
         const serializer = new XMLSerializer();
@@ -345,7 +346,6 @@
         const ctx = canvas.getContext('2d');
         const img = new Image();
         
-        // Calculate true size to prevent cutting off
         const width = shape === 'circle' ? size : size * aspectRatio;
         const height = size;
         const svgSize = Math.max(width, height) + (Math.max(width, height) * (tailLength / 100)) * 2 + 100;
@@ -389,25 +389,21 @@
       return (
         <div className="flex h-screen flex-col md:flex-row">
           
-          {/* LEFT SIDEBAR: CONTROLS */}
+          {/* LEFT SIDEBAR */}
           <div className="w-full md:w-[400px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full z-10 shadow-lg">
-            {/* Header */}
             <div className="p-5 border-b border-slate-200 bg-slate-50">
               <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <span className="text-indigo-600">💬</span> Speech Bubble Pro
               </h1>
             </div>
 
-            {/* Tabs */}
             <div className="flex border-b border-slate-200">
               <TabButton id="content" label="Content" icon={Icons.Type} />
               <TabButton id="shape" label="Shape" icon={Icons.Shape} />
               <TabButton id="tail" label="Tail" icon={Icons.Tail} />
             </div>
 
-            {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              
               {/* CONTENT TAB */}
               {activeTab === 'content' && (
                 <div className="space-y-6 animate-fadeIn">
@@ -578,7 +574,7 @@
             
             <div className="transition-all duration-300 drop-shadow-2xl">
               <SpeechBubble 
-                svgRef={svgRef}
+                svgRef={svgRef} // <-- NEW: Ref attached here
                 text={displayText}
                 tailAngle={angle}
                 width={width}
