@@ -29,7 +29,7 @@
 <body class="bg-gray-50 text-slate-800 h-screen overflow-hidden">
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     // --- ICONS ---
     const Icons = {
@@ -42,7 +42,7 @@
     // --- REUSABLE UI COMPONENTS ---
     
     const SliderControl = ({ label, value, onChange, min, max, step = 1, unit = "" }) => (
-      <div class="mb-4">
+      <div className="mb-4">
         <div className="flex justify-between items-center mb-1">
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</label>
           <span className="text-xs font-mono text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded">{value}{unit}</span>
@@ -79,12 +79,13 @@
       </div>
     );
 
-    // --- LOGIC COMPONENT (Unchanged Math) ---
+    // --- LOGIC COMPONENT ---
     const SpeechBubble = ({ 
       text, tailAngle = 270, width = 400, height = 300, shape = 'pill', fontFamily = 'Arial',
       tailWidthPercent = 25, tailLengthPercent = 15, textSize = 32, tailCurve = 0, leftTailCurve = 0,
       rightTailCurve = 0, tailTipX = 0, tailTipY = 0, useTailPosition = false, strokeWidth = 3,
-      lineSpacing = 1.25, textOffsetX = 0, textOffsetY = 0, isItalic = false, isThoughtBubble = false
+      lineSpacing = 1.25, textOffsetX = 0, textOffsetY = 0, isItalic = false, isThoughtBubble = false,
+      svgRef // Received Ref here
     }) => {
       const tailLength = Math.max(width, height) * (tailLengthPercent / 100);
       const tailBaseWidth = Math.max(width, height) * (tailWidthPercent / 100);
@@ -136,7 +137,6 @@
       const rightCurveControlX = rightBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalRightCurve;
       const rightCurveControlY = rightBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalRightCurve;
       
-      // Tip width logic
       const minTipWidth = tailBaseWidth * 0.02;
       const tipWidthAngle = (minTipWidth / (distanceToEdge + tailLength)) / 2;
       const leftTipAngle = angleRad - tipWidthAngle;
@@ -148,7 +148,6 @@
 
       const createCombinedPath = () => {
         if (isThoughtBubble) {
-          // Thought bubble scallop logic
           if (shape === 'circle' || shape === 'pill') {
             const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
             const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
@@ -169,7 +168,6 @@
             }
             return scallops.join(' ') + ' Z';
           } else {
-            // Rectangle thought bubble logic
             const rectWidth = width * 0.9;
             const rectHeight = height * 0.9;
             const rectX = width * 0.05;
@@ -207,7 +205,6 @@
           }
         }
         
-        // Standard Bubble Path
         if (shape === 'circle' || shape === 'pill') {
           const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
           const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
@@ -237,7 +234,13 @@
       const offsetY = (svgSize - height) / 2;
       
       return (
-        <svg width={svgSize} height={svgSize} viewBox={`0 0 ${svgSize} ${svgSize}`} style={{ overflow: 'visible' }}>
+        <svg 
+          ref={svgRef} 
+          width={svgSize} 
+          height={svgSize} 
+          viewBox={`0 0 ${svgSize} ${svgSize}`} 
+          style={{ overflow: 'visible' }}
+        >
           <g transform={`translate(${offsetX}, ${offsetY})`}>
             <path d={createCombinedPath()} fill="white" stroke="black" strokeWidth={strokeWidth} strokeLinejoin="round" />
             {isThoughtBubble && (
@@ -299,8 +302,10 @@
       const [isItalic, setIsItalic] = useState(false);
       const [isThoughtBubble, setIsThoughtBubble] = useState(false);
       
+      const svgRef = useRef(null);
+      
       // UI States
-      const [activeTab, setActiveTab] = useState('content'); // content | shape | tail
+      const [activeTab, setActiveTab] = useState('content');
 
       const fonts = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Times New Roman', 'Verdana'];
       const shapes = [
@@ -325,8 +330,17 @@
       };
 
       const downloadPNG = () => {
-        const svgElement = document.querySelector('svg');
-        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const svgElement = svgRef.current; // Use the Ref, not querySelector
+        if (!svgElement) return;
+
+        const serializer = new XMLSerializer();
+        let svgData = serializer.serializeToString(svgElement);
+        
+        // Ensure namespace exists for data URI compatibility
+        if (!svgData.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+            svgData = svgData.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
@@ -377,7 +391,6 @@
           
           {/* LEFT SIDEBAR: CONTROLS */}
           <div className="w-full md:w-[400px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full z-10 shadow-lg">
-            
             {/* Header */}
             <div className="p-5 border-b border-slate-200 bg-slate-50">
               <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -398,7 +411,6 @@
               {/* CONTENT TAB */}
               {activeTab === 'content' && (
                 <div className="space-y-6 animate-fadeIn">
-                  
                   <div>
                     <SectionHeader title="Text Content" />
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 mb-4">
@@ -566,6 +578,7 @@
             
             <div className="transition-all duration-300 drop-shadow-2xl">
               <SpeechBubble 
+                svgRef={svgRef}
                 text={displayText}
                 tailAngle={angle}
                 width={width}
