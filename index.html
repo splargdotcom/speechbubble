@@ -3,43 +3,91 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Speech Bubble Designer</title>
+  <title>Speech Bubble Designer Pro</title>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom Scrollbar for the sidebar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    /* Checkerboard pattern for transparency visualization */
+    .checkerboard {
+      background-color: #e5e7eb;
+      background-image:
+        linear-gradient(45deg, #f3f4f6 25%, transparent 25%, transparent 75%, #f3f4f6 75%, #f3f4f6),
+        linear-gradient(45deg, #f3f4f6 25%, transparent 25%, transparent 75%, #f3f4f6 75%, #f3f4f6);
+      background-size: 20px 20px;
+      background-position: 0 0, 10px 10px;
+    }
+  </style>
 </head>
-<body>
+<body class="bg-gray-50 text-slate-800 h-screen overflow-hidden">
   <div id="root"></div>
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
 
+    // --- ICONS ---
+    const Icons = {
+      Type: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>,
+      Shape: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>,
+      Tail: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 22s4-3 4-9-4-9-4-9"/><path d="M14 22s-4-3-4-9 4-9 4-9"/></svg>,
+      Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    };
+
+    // --- REUSABLE UI COMPONENTS ---
+    
+    const SliderControl = ({ label, value, onChange, min, max, step = 1, unit = "" }) => (
+      <div class="mb-4">
+        <div className="flex justify-between items-center mb-1">
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</label>
+          <span className="text-xs font-mono text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded">{value}{unit}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500"
+          />
+        </div>
+      </div>
+    );
+
+    const SectionHeader = ({ title }) => (
+      <h3 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 mt-6 first:mt-0">
+        {title}
+      </h3>
+    );
+
+    const Toggle = ({ label, checked, onChange, helpText }) => (
+      <div className="flex items-start gap-3 mb-4 cursor-pointer" onClick={() => onChange(!checked)}>
+        <div className={`mt-0.5 w-10 h-5 rounded-full relative transition-colors ${checked ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+          <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-transform shadow-sm ${checked ? 'left-6' : 'left-1'}`}></div>
+        </div>
+        <div className="flex-1">
+          <div className="text-sm font-medium text-slate-700 select-none">{label}</div>
+          {helpText && <div className="text-xs text-slate-400 mt-0.5">{helpText}</div>}
+        </div>
+      </div>
+    );
+
+    // --- LOGIC COMPONENT (Unchanged Math) ---
     const SpeechBubble = ({ 
-      text, 
-      tailAngle = 270, 
-      width = 400, 
-      height = 300,
-      shape = 'pill',
-      fontFamily = 'Arial',
-      tailWidthPercent = 25,
-      tailLengthPercent = 15,
-      textSize = 32,
-      tailCurve = 0,
-      leftTailCurve = 0,
-      rightTailCurve = 0,
-      tailTipX = 0,
-      tailTipY = 0,
-      useTailPosition = false,
-      strokeWidth = 3,
-      lineSpacing = 1.25,
-      textOffsetX = 0,
-      textOffsetY = 0,
-      isItalic = false,
-      isThoughtBubble = false
+      text, tailAngle = 270, width = 400, height = 300, shape = 'pill', fontFamily = 'Arial',
+      tailWidthPercent = 25, tailLengthPercent = 15, textSize = 32, tailCurve = 0, leftTailCurve = 0,
+      rightTailCurve = 0, tailTipX = 0, tailTipY = 0, useTailPosition = false, strokeWidth = 3,
+      lineSpacing = 1.25, textOffsetX = 0, textOffsetY = 0, isItalic = false, isThoughtBubble = false
     }) => {
       const tailLength = Math.max(width, height) * (tailLengthPercent / 100);
       const tailBaseWidth = Math.max(width, height) * (tailWidthPercent / 100);
-      
       const angleRad = (tailAngle * Math.PI) / 180;
       const centerX = width / 2;
       const centerY = height / 2;
@@ -47,191 +95,132 @@
       const getEdgePoint = (angle, inset = 0) => {
         if (shape === 'circle') {
           const radius = Math.min(width, height) / 2 - inset;
-          return {
-            x: centerX + Math.cos(angle) * radius,
-            y: centerY + Math.sin(angle) * radius
-          };
+          return { x: centerX + Math.cos(angle) * radius, y: centerY + Math.sin(angle) * radius };
         } else if (shape === 'pill') {
           const radiusX = width / 2 - inset;
           const radiusY = height / 2 - inset;
           const cosA = Math.cos(angle);
           const sinA = Math.sin(angle);
           const scale = Math.sqrt(1 / ((cosA * cosA) / (radiusX * radiusX) + (sinA * sinA) / (radiusY * radiusY)));
-          return {
-            x: centerX + cosA * scale,
-            y: centerY + sinA * scale
-          };
+          return { x: centerX + cosA * scale, y: centerY + sinA * scale };
         } else {
           const rectWidth = width * 0.9 - inset * 2;
           const rectHeight = height * 0.9 - inset * 2;
           const halfW = rectWidth / 2;
           const halfH = rectHeight / 2;
-          
           const cos = Math.cos(angle);
           const sin = Math.sin(angle);
-          
           const tX = cos !== 0 ? halfW / Math.abs(cos) : Infinity;
           const tY = sin !== 0 ? halfH / Math.abs(sin) : Infinity;
           const t = Math.min(tX, tY);
-          
-          return {
-            x: centerX + cos * t,
-            y: centerY + sin * t
-          };
+          return { x: centerX + cos * t, y: centerY + sin * t };
         }
       };
       
       const edgePoint = getEdgePoint(angleRad);
       const distanceToEdge = Math.sqrt(Math.pow(edgePoint.x - centerX, 2) + Math.pow(edgePoint.y - centerY, 2));
       const tailWidthAngle = (tailBaseWidth / distanceToEdge) / 2;
-      
       const leftBaseAngle = angleRad - tailWidthAngle;
       const rightBaseAngle = angleRad + tailWidthAngle;
-      
       const leftBase = getEdgePoint(leftBaseAngle, 0);
       const rightBase = getEdgePoint(rightBaseAngle, 0);
-      
       const baseTipX = centerX + Math.cos(angleRad) * (distanceToEdge + tailLength);
       const baseTipY = centerY + Math.sin(angleRad) * (distanceToEdge + tailLength);
-      
       const tipX = useTailPosition ? baseTipX + tailTipX : baseTipX;
       const tipY = useTailPosition ? baseTipY + tailTipY : baseTipY;
-      
       const perpAngle = angleRad + Math.PI / 2;
-      
       const totalLeftCurve = tailCurve + leftTailCurve;
       const totalRightCurve = tailCurve + rightTailCurve;
-      
       const leftCurveControlX = leftBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalLeftCurve;
       const leftCurveControlY = leftBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalLeftCurve;
       const rightCurveControlX = rightBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalRightCurve;
       const rightCurveControlY = rightBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalRightCurve;
       
+      // Tip width logic
       const minTipWidth = tailBaseWidth * 0.02;
       const tipWidthAngle = (minTipWidth / (distanceToEdge + tailLength)) / 2;
       const leftTipAngle = angleRad - tipWidthAngle;
       const rightTipAngle = angleRad + tipWidthAngle;
-      
       const leftTipX = centerX + Math.cos(leftTipAngle) * (distanceToEdge + tailLength);
       const leftTipY = centerY + Math.sin(leftTipAngle) * (distanceToEdge + tailLength);
       const rightTipX = centerX + Math.cos(rightTipAngle) * (distanceToEdge + tailLength);
       const rightTipY = centerY + Math.sin(rightTipAngle) * (distanceToEdge + tailLength);
-      
+
       const createCombinedPath = () => {
         if (isThoughtBubble) {
+          // Thought bubble scallop logic
           if (shape === 'circle' || shape === 'pill') {
             const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
             const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
-            
             const numScallops = 12;
             const scallops = [];
-            
             for (let i = 0; i < numScallops; i++) {
               const angle1 = (i / numScallops) * 2 * Math.PI;
               const angle2 = ((i + 1) / numScallops) * 2 * Math.PI;
-              
               const x1 = centerX + Math.cos(angle1) * rx * 0.95;
               const y1 = centerY + Math.sin(angle1) * ry * 0.95;
               const x2 = centerX + Math.cos(angle2) * rx * 0.95;
               const y2 = centerY + Math.sin(angle2) * ry * 0.95;
-              
               const midAngle = (angle1 + angle2) / 2;
               const bulgeX = centerX + Math.cos(midAngle) * Math.max(rx, ry) * 1.05;
               const bulgeY = centerY + Math.sin(midAngle) * Math.max(rx, ry) * 1.05;
-              
-              if (i === 0) {
-                scallops.push(`M ${x1} ${y1}`);
-              }
+              if (i === 0) scallops.push(`M ${x1} ${y1}`);
               scallops.push(`Q ${bulgeX} ${bulgeY} ${x2} ${y2}`);
             }
-            
             return scallops.join(' ') + ' Z';
           } else {
+            // Rectangle thought bubble logic
             const rectWidth = width * 0.9;
             const rectHeight = height * 0.9;
             const rectX = width * 0.05;
             const rectY = height * 0.05;
-            
             const numScallops = 8;
             const scallops = [];
-            
             for (let i = 0; i < numScallops; i++) {
               const progress = i / numScallops;
               let x1, y1, x2, y2, bulgeX, bulgeY;
-              
               if (progress < 0.25) {
                 const p = progress * 4;
-                x1 = rectX + rectWidth * p;
-                y1 = rectY;
-                x2 = rectX + rectWidth * ((i + 1) / numScallops * 4);
-                y2 = rectY;
-                bulgeX = (x1 + x2) / 2;
-                bulgeY = rectY - 20;
+                x1 = rectX + rectWidth * p; y1 = rectY;
+                x2 = rectX + rectWidth * ((i + 1) / numScallops * 4); y2 = rectY;
+                bulgeX = (x1 + x2) / 2; bulgeY = rectY - 20;
               } else if (progress < 0.5) {
                 const p = (progress - 0.25) * 4;
-                x1 = rectX + rectWidth;
-                y1 = rectY + rectHeight * p;
-                x2 = rectX + rectWidth;
-                y2 = rectY + rectHeight * ((i + 1) / numScallops - 0.25) * 4;
-                bulgeX = rectX + rectWidth + 20;
-                bulgeY = (y1 + y2) / 2;
+                x1 = rectX + rectWidth; y1 = rectY + rectHeight * p;
+                x2 = rectX + rectWidth; y2 = rectY + rectHeight * ((i + 1) / numScallops - 0.25) * 4;
+                bulgeX = rectX + rectWidth + 20; bulgeY = (y1 + y2) / 2;
               } else if (progress < 0.75) {
                 const p = (progress - 0.5) * 4;
-                x1 = rectX + rectWidth * (1 - p);
-                y1 = rectY + rectHeight;
-                x2 = rectX + rectWidth * (1 - ((i + 1) / numScallops - 0.5) * 4);
-                y2 = rectY + rectHeight;
-                bulgeX = (x1 + x2) / 2;
-                bulgeY = rectY + rectHeight + 20;
+                x1 = rectX + rectWidth * (1 - p); y1 = rectY + rectHeight;
+                x2 = rectX + rectWidth * (1 - ((i + 1) / numScallops - 0.5) * 4); y2 = rectY + rectHeight;
+                bulgeX = (x1 + x2) / 2; bulgeY = rectY + rectHeight + 20;
               } else {
                 const p = (progress - 0.75) * 4;
-                x1 = rectX;
-                y1 = rectY + rectHeight * (1 - p);
-                x2 = rectX;
-                y2 = rectY + rectHeight * (1 - ((i + 1) / numScallops - 0.75) * 4);
-                bulgeX = rectX - 20;
-                bulgeY = (y1 + y2) / 2;
+                x1 = rectX; y1 = rectY + rectHeight * (1 - p);
+                x2 = rectX; y2 = rectY + rectHeight * (1 - ((i + 1) / numScallops - 0.75) * 4);
+                bulgeX = rectX - 20; bulgeY = (y1 + y2) / 2;
               }
-              
-              if (i === 0) {
-                scallops.push(`M ${x1} ${y1}`);
-              }
+              if (i === 0) scallops.push(`M ${x1} ${y1}`);
               scallops.push(`Q ${bulgeX} ${bulgeY} ${x2} ${y2}`);
             }
-            
             return scallops.join(' ') + ' Z';
           }
         }
         
+        // Standard Bubble Path
         if (shape === 'circle' || shape === 'pill') {
           const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
           const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
-          
           const startAngle = leftBaseAngle;
           const endAngle = rightBaseAngle;
-          
           let tailSectionAngle = endAngle - startAngle;
           if (tailSectionAngle < 0) tailSectionAngle += 2 * Math.PI;
-          
           const largeArcFlag = tailSectionAngle < Math.PI ? 1 : 0;
           
           if (tailCurve !== 0 || leftTailCurve !== 0 || rightTailCurve !== 0) {
-            return `
-              M ${leftBase.x} ${leftBase.y}
-              Q ${leftCurveControlX} ${leftCurveControlY} ${leftTipX} ${leftTipY}
-              L ${rightTipX} ${rightTipY}
-              Q ${rightCurveControlX} ${rightCurveControlY} ${rightBase.x} ${rightBase.y}
-              A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y}
-              Z
-            `;
+            return `M ${leftBase.x} ${leftBase.y} Q ${leftCurveControlX} ${leftCurveControlY} ${leftTipX} ${leftTipY} L ${rightTipX} ${rightTipY} Q ${rightCurveControlX} ${rightCurveControlY} ${rightBase.x} ${rightBase.y} A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y} Z`;
           } else {
-            return `
-              M ${leftBase.x} ${leftBase.y}
-              L ${tipX} ${tipY}
-              L ${rightBase.x} ${rightBase.y}
-              A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y}
-              Z
-            `;
+            return `M ${leftBase.x} ${leftBase.y} L ${tipX} ${tipY} L ${rightBase.x} ${rightBase.y} A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y} Z`;
           }
         } else {
           const rectWidth = width * 0.9;
@@ -239,23 +228,7 @@
           const rectX = width * 0.05;
           const rectY = height * 0.05;
           const cornerRadius = 30;
-          
-          return `
-            M ${rectX + cornerRadius} ${rectY}
-            L ${rectX + rectWidth - cornerRadius} ${rectY}
-            Q ${rectX + rectWidth} ${rectY} ${rectX + rectWidth} ${rectY + cornerRadius}
-            L ${rectX + rectWidth} ${rectY + rectHeight - cornerRadius}
-            Q ${rectX + rectWidth} ${rectY + rectHeight} ${rectX + rectWidth - cornerRadius} ${rectY + rectHeight}
-            L ${rectX + cornerRadius} ${rectY + rectHeight}
-            Q ${rectX} ${rectY + rectHeight} ${rectX} ${rectY + rectHeight - cornerRadius}
-            L ${rectX} ${rectY + cornerRadius}
-            Q ${rectX} ${rectY} ${rectX + cornerRadius} ${rectY}
-            Z
-            M ${leftBase.x} ${leftBase.y}
-            L ${tipX} ${tipY}
-            L ${rightBase.x} ${rightBase.y}
-            Z
-          `;
+          return `M ${rectX + cornerRadius} ${rectY} L ${rectX + rectWidth - cornerRadius} ${rectY} Q ${rectX + rectWidth} ${rectY} ${rectX + rectWidth} ${rectY + cornerRadius} L ${rectX + rectWidth} ${rectY + rectHeight - cornerRadius} Q ${rectX + rectWidth} ${rectY + rectHeight} ${rectX + rectWidth - cornerRadius} ${rectY + rectHeight} L ${rectX + cornerRadius} ${rectY + rectHeight} Q ${rectX} ${rectY + rectHeight} ${rectX} ${rectY + rectHeight - cornerRadius} L ${rectX} ${rectY + cornerRadius} Q ${rectX} ${rectY} ${rectX + cornerRadius} ${rectY} Z M ${leftBase.x} ${leftBase.y} L ${tipX} ${tipY} L ${rightBase.x} ${rightBase.y} Z`;
         }
       };
       
@@ -264,89 +237,32 @@
       const offsetY = (svgSize - height) / 2;
       
       return (
-        <svg 
-          width={svgSize} 
-          height={svgSize} 
-          viewBox={`0 0 ${svgSize} ${svgSize}`}
-          style={{ overflow: 'visible' }}
-        >
+        <svg width={svgSize} height={svgSize} viewBox={`0 0 ${svgSize} ${svgSize}`} style={{ overflow: 'visible' }}>
           <g transform={`translate(${offsetX}, ${offsetY})`}>
-            <path
-              d={createCombinedPath()}
-              fill="white"
-              stroke="black"
-              strokeWidth={strokeWidth}
-              strokeLinejoin="round"
-            />
-            
+            <path d={createCombinedPath()} fill="white" stroke="black" strokeWidth={strokeWidth} strokeLinejoin="round" />
             {isThoughtBubble && (
               <>
-                <circle
-                  cx={tipX * 0.7 + centerX * 0.3}
-                  cy={tipY * 0.7 + centerY * 0.3}
-                  r={Math.max(width, height) * 0.04}
-                  fill="white"
-                  stroke="black"
-                  strokeWidth={strokeWidth}
-                />
-                <circle
-                  cx={tipX * 0.85 + centerX * 0.15}
-                  cy={tipY * 0.85 + centerY * 0.15}
-                  r={Math.max(width, height) * 0.025}
-                  fill="white"
-                  stroke="black"
-                  strokeWidth={strokeWidth}
-                />
+                <circle cx={tipX * 0.7 + centerX * 0.3} cy={tipY * 0.7 + centerY * 0.3} r={Math.max(width, height) * 0.04} fill="white" stroke="black" strokeWidth={strokeWidth} />
+                <circle cx={tipX * 0.85 + centerX * 0.15} cy={tipY * 0.85 + centerY * 0.15} r={Math.max(width, height) * 0.025} fill="white" stroke="black" strokeWidth={strokeWidth} />
               </>
             )}
-            
-            <text
-              x={centerX + textOffsetX}
-              y={centerY + textOffsetY}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={textSize}
-              fontWeight="bold"
-              fontFamily={fontFamily}
-              fontStyle={isItalic ? 'italic' : 'normal'}
-            >
+            <text x={centerX + textOffsetX} y={centerY + textOffsetY} textAnchor="middle" dominantBaseline="middle" fontSize={textSize} fontWeight="bold" fontFamily={fontFamily} fontStyle={isItalic ? 'italic' : 'normal'}>
               {text.split('\n').map((line, i, arr) => {
                 const parts = [];
                 let currentText = '';
                 let isInItalic = false;
                 let charIndex = 0;
-                
                 while (charIndex < line.length) {
                   if (line[charIndex] === '*') {
-                    if (currentText) {
-                      parts.push({ text: currentText, italic: isInItalic });
-                      currentText = '';
-                    }
-                    isInItalic = !isInItalic;
-                    charIndex++;
-                  } else {
-                    currentText += line[charIndex];
-                    charIndex++;
-                  }
+                    if (currentText) { parts.push({ text: currentText, italic: isInItalic }); currentText = ''; }
+                    isInItalic = !isInItalic; charIndex++;
+                  } else { currentText += line[charIndex]; charIndex++; }
                 }
-                
-                if (currentText) {
-                  parts.push({ text: currentText, italic: isInItalic });
-                }
-                
+                if (currentText) parts.push({ text: currentText, italic: isInItalic });
                 return (
-                  <tspan
-                    key={i}
-                    x={centerX + textOffsetX}
-                    dy={i === 0 ? -((arr.length - 1) * (textSize * 0.6)) : textSize * lineSpacing}
-                  >
+                  <tspan key={i} x={centerX + textOffsetX} dy={i === 0 ? -((arr.length - 1) * (textSize * 0.6)) : textSize * lineSpacing}>
                     {parts.map((part, partIndex) => (
-                      <tspan
-                        key={partIndex}
-                        fontStyle={part.italic ? 'italic' : (isItalic ? 'italic' : 'normal')}
-                      >
-                        {part.text}
-                      </tspan>
+                      <tspan key={partIndex} fontStyle={part.italic ? 'italic' : (isItalic ? 'italic' : 'normal')}>{part.text}</tspan>
                     ))}
                   </tspan>
                 );
@@ -357,7 +273,9 @@
       );
     };
 
+    // --- MAIN APP COMPONENT ---
     function App() {
+      // Logic States
       const [angle, setAngle] = useState(270);
       const [shape, setShape] = useState('pill');
       const [font, setFont] = useState('Arial');
@@ -381,22 +299,16 @@
       const [isItalic, setIsItalic] = useState(false);
       const [isThoughtBubble, setIsThoughtBubble] = useState(false);
       
-      const fonts = [
-        'Arial',
-        'Georgia',
-        'Courier New',
-        'Comic Sans MS',
-        'Impact',
-        'Times New Roman',
-        'Verdana'
-      ];
-      
+      // UI States
+      const [activeTab, setActiveTab] = useState('content'); // content | shape | tail
+
+      const fonts = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Times New Roman', 'Verdana'];
       const shapes = [
         { value: 'pill', label: 'Pill' },
         { value: 'circle', label: 'Circle' },
         { value: 'rectangle', label: 'Rectangle' }
       ];
-      
+
       const handleTextChange = (index, value) => {
         const newText = [...customText];
         newText[index] = value;
@@ -411,12 +323,7 @@
           setCustomText(customText.slice(0, newLines));
         }
       };
-      
-      const displayText = customText.slice(0, lines).join('\n');
-      
-      const width = shape === 'circle' ? size : size * aspectRatio;
-      const height = size;
-      
+
       const downloadPNG = () => {
         const svgElement = document.querySelector('svg');
         const svgData = new XMLSerializer().serializeToString(svgElement);
@@ -424,7 +331,11 @@
         const ctx = canvas.getContext('2d');
         const img = new Image();
         
+        // Calculate true size to prevent cutting off
+        const width = shape === 'circle' ? size : size * aspectRatio;
+        const height = size;
         const svgSize = Math.max(width, height) + (Math.max(width, height) * (tailLength / 100)) * 2 + 100;
+        
         canvas.width = svgSize;
         canvas.height = svgSize;
         
@@ -439,398 +350,247 @@
             URL.revokeObjectURL(url);
           });
         };
-        
         img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
       };
-      
+
+      // Calculated Props
+      const displayText = customText.slice(0, lines).join('\n');
+      const width = shape === 'circle' ? size : size * aspectRatio;
+      const height = size;
+
+      const TabButton = ({ id, label, icon: Icon }) => (
+        <button
+          onClick={() => setActiveTab(id)}
+          className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition-colors duration-200 flex items-center justify-center gap-2 ${
+            activeTab === id 
+              ? 'border-indigo-600 text-indigo-600 bg-indigo-50' 
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          <Icon />
+          {label}
+        </button>
+      );
+
       return (
-        <div className="min-h-screen bg-gray-100 p-8">
-          <div className="max-w-7xl mx-auto bg-white rounded-lg shadow-lg p-8">
-            <h1 className="text-3xl font-bold mb-6 text-center">
-              Speech Bubble Designer
-            </h1>
+        <div className="flex h-screen flex-col md:flex-row">
+          
+          {/* LEFT SIDEBAR: CONTROLS */}
+          <div className="w-full md:w-[400px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full z-10 shadow-lg">
             
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="space-y-6">
-                <div>
-                  <button
-                    onClick={downloadPNG}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition text-lg"
-                  >
-                    Download as PNG
-                  </button>
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Text Size: {textSize}px
-                  </label>
-                  <input
-                    type="range"
-                    min="16"
-                    max="72"
-                    value={textSize}
-                    onChange={(e) => setTextSize(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Line Spacing: {lineSpacing.toFixed(2)}
-                  </label>
-                  <input
-                    type="range"
-                    min="0.8"
-                    max="2"
-                    step="0.05"
-                    value={lineSpacing}
-                    onChange={(e) => setLineSpacing(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Text Position X: {textOffsetX}px
-                  </label>
-                  <input
-                    type="range"
-                    min="-100"
-                    max="100"
-                    value={textOffsetX}
-                    onChange={(e) => setTextOffsetX(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Text Position Y: {textOffsetY}px
-                  </label>
-                  <input
-                    type="range"
-                    min="-100"
-                    max="100"
-                    value={textOffsetY}
-                    onChange={(e) => setTextOffsetY(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Line Thickness: {strokeWidth}px
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={strokeWidth}
-                    onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Font Family
-                  </label>
-                  <select
-                    value={font}
-                    onChange={(e) => setFont(e.target.value)}
-                    className="w-full p-3 border-2 border-gray-300 rounded-lg text-lg"
-                  >
-                    {fonts.map((f) => (
-                      <option key={f} value={f} style={{ fontFamily: f }}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="flex items-center gap-2 text-lg font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isItalic}
-                      onChange={(e) => setIsItalic(e.target.checked)}
-                      className="w-5 h-5 cursor-pointer"
-                    />
-                    Italic Text (All)
-                  </label>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Tip: Use *asterisks* around words for individual italic text
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="flex items-center gap-2 text-lg font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isThoughtBubble}
-                      onChange={(e) => setIsThoughtBubble(e.target.checked)}
-                      className="w-5 h-5 cursor-pointer"
-                    />
-                    Thought Bubble Style
-                  </label>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Creates a cloudy bubble with thought circles
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Number of Lines: {lines}
-                  </label>
-                  <div className="flex gap-2">
-                    {[1, 2, 3, 4, 5].map((num) => (
-                      <button
-                        key={num}
-                        onClick={() => handleLinesChange(num)}
-                        className={`flex-1 py-2 px-4 rounded-lg font-semibold transition ${
-                          lines === num
-                            ? 'bg-green-500 text-white'
-                            : 'bg-gray-200 hover:bg-gray-300'
-                        }`}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Text Content
-                  </label>
-                  <div className="space-y-2">
-                    {Array.from({ length: lines }).map((_, i) => (
-                      <input
-                        key={i}
-                        type="text"
-                        value={customText[i] || ''}
-                        onChange={(e) => handleTextChange(i, e.target.value)}
-                        placeholder={`Line ${i + 1}`}
-                        className="w-full p-3 border-2 border-gray-300 rounded-lg text-lg"
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
+            {/* Header */}
+            <div className="p-5 border-b border-slate-200 bg-slate-50">
+              <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <span className="text-indigo-600">💬</span> Speech Bubble Pro
+              </h1>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200">
+              <TabButton id="content" label="Content" icon={Icons.Type} />
+              <TabButton id="shape" label="Shape" icon={Icons.Shape} />
+              <TabButton id="tail" label="Tail" icon={Icons.Tail} />
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6">
               
-              <div className="lg:col-span-2 space-y-6">
-                <div>
-                  <label className="block text-lg font-semibold mb-2">
-                    Bubble Shape
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
+              {/* CONTENT TAB */}
+              {activeTab === 'content' && (
+                <div className="space-y-6 animate-fadeIn">
+                  
+                  <div>
+                    <SectionHeader title="Text Content" />
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 mb-4">
+                      {Array.from({ length: lines }).map((_, i) => (
+                        <input
+                          key={i}
+                          type="text"
+                          value={customText[i] || ''}
+                          onChange={(e) => handleTextChange(i, e.target.value)}
+                          placeholder={`Line ${i + 1}`}
+                          className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        />
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-sm font-medium text-slate-600">Number of Lines</span>
+                      <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                        {[1, 2, 3, 4, 5].map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => handleLinesChange(num)}
+                            className={`w-8 h-8 rounded text-sm font-bold transition-all ${
+                              lines === num ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:bg-slate-200'
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <SectionHeader title="Typography" />
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Font Family</label>
+                         <select
+                          value={font}
+                          onChange={(e) => setFont(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-md text-sm"
+                        >
+                          {fonts.map((f) => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+                        </select>
+                      </div>
+
+                      <SliderControl label="Font Size" value={textSize} onChange={setTextSize} min={12} max={120} unit="px" />
+                      <SliderControl label="Line Spacing" value={lineSpacing} onChange={setLineSpacing} min={0.8} max={2.5} step={0.05} />
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                         <SliderControl label="Position X" value={textOffsetX} onChange={setTextOffsetX} min={-100} max={100} unit="px" />
+                         <SliderControl label="Position Y" value={textOffsetY} onChange={setTextOffsetY} min={-100} max={100} unit="px" />
+                      </div>
+
+                      <Toggle 
+                        label="Italicize All Text" 
+                        checked={isItalic} 
+                        onChange={setIsItalic} 
+                        helpText="Tip: You can also use *asterisks* in the text inputs for specific words." 
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SHAPE TAB */}
+              {activeTab === 'shape' && (
+                <div className="space-y-6 animate-fadeIn">
+                  <SectionHeader title="Bubble Style" />
+                  
+                  <div className="grid grid-cols-3 gap-2 mb-6">
                     {shapes.map((s) => (
                       <button
                         key={s.value}
                         onClick={() => setShape(s.value)}
-                        className={`py-2 px-4 rounded-lg font-semibold transition ${
+                        className={`py-2 px-2 text-sm rounded-md font-medium transition-all ${
                           shape === s.value
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-200 hover:bg-gray-300'
+                            ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
                         {s.label}
                       </button>
                     ))}
                   </div>
-                </div>
-                
-                <div className="flex items-center justify-center bg-gray-50 rounded-lg p-8 min-h-[400px]">
-                  <SpeechBubble 
-                    text={displayText}
-                    tailAngle={angle}
-                    width={width}
-                    height={height}
-                    shape={shape}
-                    fontFamily={font}
-                    tailWidthPercent={tailWidth}
-                    tailLengthPercent={tailLength}
-                    textSize={textSize}
-                    tailCurve={tailCurve}
-                    leftTailCurve={leftTailCurve}
-                    rightTailCurve={rightTailCurve}
-                    useTailPosition={useTailPosition}
-                    tailTipX={tailTipX}
-                    tailTipY={tailTipY}
-                    strokeWidth={strokeWidth}
-                    lineSpacing={lineSpacing}
-                    textOffsetX={textOffsetX}
-                    textOffsetY={textOffsetY}
-                    isItalic={isItalic}
-                    isThoughtBubble={isThoughtBubble}
+
+                  <Toggle 
+                    label="Thought Bubble Mode" 
+                    checked={isThoughtBubble} 
+                    onChange={setIsThoughtBubble} 
+                    helpText="Changes lines to cloudy scallops and adds thinking circles."
                   />
-                </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={useTailPosition}
-                        onChange={(e) => setUseTailPosition(e.target.checked)}
-                        className="w-4 h-4 cursor-pointer"
-                      />
-                      Enable Tail Tip Offset (X/Y adjustments)
-                    </label>
-                  </div>
+
+                  <SectionHeader title="Dimensions" />
+                  <SliderControl label="Overall Size" value={size} onChange={setSize} min={150} max={600} unit="px" />
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Tail Angle: {angle}°
-                      </label>
-                      <input
-                        type="range"
-                        min="0"
-                        max="360"
-                        value={angle}
-                        onChange={(e) => setAngle(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Tail Length: {tailLength}%
-                      </label>
-                      <input
-                        type="range"
-                        min="5"
-                        max="60"
-                        value={tailLength}
-                        onChange={(e) => setTailLength(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                    
-                    {useTailPosition && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-semibold mb-2">
-                            Tail Tip X Offset: {tailTipX}px
-                          </label>
-                          <input
-                            type="range"
-                            min="-200"
-                            max="200"
-                            value={tailTipX}
-                            onChange={(e) => setTailTipX(Number(e.target.value))}
-                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-semibold mb-2">
-                            Tail Tip Y Offset: {tailTipY}px
-                          </label>
-                          <input
-                            type="range"
-                            min="-200"
-                            max="200"
-                            value={tailTipY}
-                            onChange={(e) => setTailTipY(Number(e.target.value))}
-                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
-                      </>
-                    )}
-                    
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Bubble Size: {size}px
-                      </label>
-                      <input
-                        type="range"
-                        min="150"
-                        max="500"
-                        value={size}
-                        onChange={(e) => setSize(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Tail Width: {tailWidth}%
-                      </label>
-                      <input
-                        type="range"
-                        min="5"
-                        max="20"
-                        value={tailWidth}
-                        onChange={(e) => setTailWidth(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Tail Curve (Both): {tailCurve}
-                      </label>
-                      <input
-                        type="range"
-                        min="-50"
-                        max="50"
-                        value={tailCurve}
-                        onChange={(e) => setTailCurve(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Left Tail Curve: {leftTailCurve}
-                      </label>
-                      <input
-                        type="range"
-                        min="-50"
-                        max="50"
-                        value={leftTailCurve}
-                        onChange={(e) => setLeftTailCurve(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Right Tail Curve: {rightTailCurve}
-                      </label>
-                      <input
-                        type="range"
-                        min="-50"
-                        max="50"
-                        value={rightTailCurve}
-                        onChange={(e) => setRightTailCurve(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">
-                        Bubble Shape: {aspectRatio === 1 ? 'Circle' : aspectRatio < 1.15 ? 'Round' : aspectRatio < 1.5 ? 'Oval' : aspectRatio < 2 ? 'Wide' : 'Tube'} ({aspectRatio.toFixed(2)}:1)
-                      </label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="3"
-                        step="0.05"
-                        value={aspectRatio}
-                        onChange={(e) => setAspectRatio(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                        disabled={shape === 'circle'}
-                      />
-                    </div>
-                  </div>
+                  {shape !== 'circle' && (
+                    <SliderControl 
+                      label="Aspect Ratio" 
+                      value={aspectRatio} 
+                      onChange={setAspectRatio} 
+                      min={1} 
+                      max={3} 
+                      step={0.05}
+                      unit=":1"
+                    />
+                  )}
+
+                  <SliderControl label="Line Thickness" value={strokeWidth} onChange={setStrokeWidth} min={1} max={10} unit="px" />
                 </div>
-              </div>
+              )}
+
+              {/* TAIL TAB */}
+              {activeTab === 'tail' && (
+                <div className="space-y-6 animate-fadeIn">
+                  <SectionHeader title="Position & Size" />
+                  
+                  <SliderControl label="Tail Angle" value={angle} onChange={setAngle} min={0} max={360} unit="°" />
+                  <SliderControl label="Tail Length" value={tailLength} onChange={setTailLength} min={5} max={60} unit="%" />
+                  <SliderControl label="Tail Base Width" value={tailWidth} onChange={setTailWidth} min={5} max={30} unit="%" />
+
+                  <SectionHeader title="Curvature (Physics)" />
+                  <p className="text-xs text-slate-500 mb-4 bg-slate-100 p-2 rounded">
+                    Adjust how the tail bends. Positive values curve one way, negative values curve the other.
+                  </p>
+                  <SliderControl label="Overall Curve" value={tailCurve} onChange={setTailCurve} min={-100} max={100} />
+                  
+                  <div className="border-t border-slate-100 pt-4 mt-4">
+                     <p className="text-xs font-bold text-slate-400 mb-2">Advanced Asymmetry</p>
+                     <SliderControl label="Left Side Curve" value={leftTailCurve} onChange={setLeftTailCurve} min={-80} max={80} />
+                     <SliderControl label="Right Side Curve" value={rightTailCurve} onChange={setRightTailCurve} min={-80} max={80} />
+                  </div>
+
+                  <SectionHeader title="Manual Tip Offset" />
+                  <Toggle label="Enable Manual Offset" checked={useTailPosition} onChange={setUseTailPosition} />
+                  
+                  {useTailPosition && (
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 grid grid-cols-2 gap-4">
+                      <SliderControl label="X Offset" value={tailTipX} onChange={setTailTipX} min={-200} max={200} unit="px" />
+                      <SliderControl label="Y Offset" value={tailTipY} onChange={setTailTipY} min={-200} max={200} unit="px" />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer / Action */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={downloadPNG}
+                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-transform transform active:scale-95"
+              >
+                <Icons.Download />
+                Download PNG
+              </button>
             </div>
           </div>
+
+          {/* RIGHT CANVAS AREA */}
+          <div className="flex-1 bg-gray-200 flex items-center justify-center relative overflow-hidden checkerboard p-8">
+            <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-mono text-slate-500 border border-slate-200">
+              Canvas Preview
+            </div>
+            
+            <div className="transition-all duration-300 drop-shadow-2xl">
+              <SpeechBubble 
+                text={displayText}
+                tailAngle={angle}
+                width={width}
+                height={height}
+                shape={shape}
+                fontFamily={font}
+                tailWidthPercent={tailWidth}
+                tailLengthPercent={tailLength}
+                textSize={textSize}
+                tailCurve={tailCurve}
+                leftTailCurve={leftTailCurve}
+                rightTailCurve={rightTailCurve}
+                useTailPosition={useTailPosition}
+                tailTipX={tailTipX}
+                tailTipY={tailTipY}
+                strokeWidth={strokeWidth}
+                lineSpacing={lineSpacing}
+                textOffsetX={textOffsetX}
+                textOffsetY={textOffsetY}
+                isItalic={isItalic}
+                isThoughtBubble={isThoughtBubble}
+              />
+            </div>
+          </div>
+
         </div>
       );
     }
