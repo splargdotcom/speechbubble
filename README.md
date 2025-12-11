@@ -5,7 +5,8 @@
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Launch_App-success?style=for-the-badge&logo=github)](https://splargdotcom.github.io/speechbubble/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-![Speech Bubble Designer Pro Screenshot](screenshot.png)
+<img width="850" height="850" alt="speech-bubble" src="https://github.com/user-attachments/assets/cf4bce19-a9f5-4bac-8d93-d432862349dc" />
+
 
 ## 🚀 Overview
 
