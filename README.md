@@ -5,7 +5,7 @@
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Launch_App-success?style=for-the-badge&logo=github)](https://splargdotcom.github.io/speechbubble/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-<img width="1919" height="1079" alt="screenshot" src="https://github.com/user-attachments/assets/cfc191f4-2457-40be-a1bb-69b6b6039875" />
+<img width="1919" height="1079" alt="Screenshot 2025-12-11 195637" src="https://github.com/user-attachments/assets/54817b90-b11a-45d7-ac40-b41331f99895" />
 
 ## 🚀 Overview
 
