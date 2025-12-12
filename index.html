@@ -9,13 +9,11 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* Custom Scrollbar for the sidebar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     
-    /* Checkerboard pattern for transparency visualization */
     .checkerboard {
       background-color: #e5e7eb;
       background-image:
@@ -33,14 +31,14 @@
 
     // --- ICONS ---
     const Icons = {
-      Type: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>,
-      Shape: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>,
-      Tail: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 22s4-3 4-9-4-9-4-9"/><path d="M14 22s-4-3-4-9 4-9 4-9"/></svg>,
-      Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Type: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>,
+      Shape: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>,
+      Tail: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 22s4-3 4-9-4-9-4-9"/><path d="M14 22s-4-3-4-9 4-9 4-9"/></svg>,
+      Bg: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
+      Download: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     };
 
-    // --- REUSABLE UI COMPONENTS ---
-    
+    // --- COMPONENTS ---
     const SliderControl = ({ label, value, onChange, min, max, step = 1, unit = "" }) => (
       <div className="mb-4">
         <div className="flex justify-between items-center mb-1">
@@ -49,11 +47,7 @@
         </div>
         <div className="flex items-center gap-3">
           <input
-            type="range"
-            min={min}
-            max={max}
-            step={step}
-            value={value}
+            type="range" min={min} max={max} step={step} value={value}
             onChange={(e) => onChange(Number(e.target.value))}
             className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500"
           />
@@ -62,9 +56,7 @@
     );
 
     const SectionHeader = ({ title }) => (
-      <h3 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 mt-6 first:mt-0">
-        {title}
-      </h3>
+      <h3 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 mb-4 mt-6 first:mt-0">{title}</h3>
     );
 
     const Toggle = ({ label, checked, onChange, helpText }) => (
@@ -79,14 +71,18 @@
       </div>
     );
 
-    // --- LOGIC COMPONENT ---
+    // --- LOGIC COMPONENT (Your Original Working Logic) ---
     const SpeechBubble = ({ 
       text, tailAngle = 270, width = 400, height = 300, shape = 'pill', fontFamily = 'Arial',
-      tailWidthPercent = 25, tailLengthPercent = 15, textSize = 32, tailCurve = 0, leftTailCurve = 0,
-      rightTailCurve = 0, tailTipX = 0, tailTipY = 0, useTailPosition = false, strokeWidth = 3,
+      tailWidthPercent = 25, tailLengthPercent = 15, textSize = 32, 
+      tailCurve = 0, leftTailCurve = 0, rightTailCurve = 0, 
+      tailTipX = 0, tailTipY = 0, useTailPosition = false, strokeWidth = 3,
       lineSpacing = 1.25, textOffsetX = 0, textOffsetY = 0, isItalic = false, isThoughtBubble = false,
-      svgRef // <-- NEW: Accepting the ref
+      // New Props for positioning
+      bubbleX, bubbleY, canvasW, canvasH,
+      svgRef
     }) => {
+      // Logic from your working file
       const tailLength = Math.max(width, height) * (tailLengthPercent / 100);
       const tailBaseWidth = Math.max(width, height) * (tailWidthPercent / 100);
       const angleRad = (tailAngle * Math.PI) / 180;
@@ -130,13 +126,21 @@
       const tipX = useTailPosition ? baseTipX + tailTipX : baseTipX;
       const tipY = useTailPosition ? baseTipY + tailTipY : baseTipY;
       const perpAngle = angleRad + Math.PI / 2;
-      const totalLeftCurve = tailCurve + leftTailCurve;
-      const totalRightCurve = tailCurve + rightTailCurve;
+      
+      // Strict Number enforcement to prevent crashes
+      const safeTailCurve = Number(tailCurve) || 0;
+      const safeLeftCurve = Number(leftTailCurve) || 0;
+      const safeRightCurve = Number(rightTailCurve) || 0;
+
+      const totalLeftCurve = safeTailCurve + safeLeftCurve;
+      const totalRightCurve = safeTailCurve + safeRightCurve;
+      
       const leftCurveControlX = leftBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalLeftCurve;
       const leftCurveControlY = leftBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalLeftCurve;
       const rightCurveControlX = rightBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalRightCurve;
       const rightCurveControlY = rightBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalRightCurve;
       
+      // Tip width logic
       const minTipWidth = tailBaseWidth * 0.02;
       const tipWidthAngle = (minTipWidth / (distanceToEdge + tailLength)) / 2;
       const leftTipAngle = angleRad - tipWidthAngle;
@@ -148,6 +152,7 @@
 
       const createCombinedPath = () => {
         if (isThoughtBubble) {
+          // Thought Bubble Logic
           if (shape === 'circle' || shape === 'pill') {
             const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
             const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
@@ -168,6 +173,7 @@
             }
             return scallops.join(' ') + ' Z';
           } else {
+            // Rectangle Thought Bubble
             const rectWidth = width * 0.9;
             const rectHeight = height * 0.9;
             const rectX = width * 0.05;
@@ -205,6 +211,7 @@
           }
         }
         
+        // Standard Bubble Path (Circle/Pill/Rect)
         if (shape === 'circle' || shape === 'pill') {
           const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
           const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
@@ -214,13 +221,13 @@
           if (tailSectionAngle < 0) tailSectionAngle += 2 * Math.PI;
           const largeArcFlag = tailSectionAngle < Math.PI ? 1 : 0;
           
-          if (tailCurve !== 0 || leftTailCurve !== 0 || rightTailCurve !== 0) {
+          if (safeTailCurve !== 0 || safeLeftCurve !== 0 || safeRightCurve !== 0) {
             return `M ${leftBase.x} ${leftBase.y} Q ${leftCurveControlX} ${leftCurveControlY} ${leftTipX} ${leftTipY} L ${rightTipX} ${rightTipY} Q ${rightCurveControlX} ${rightCurveControlY} ${rightBase.x} ${rightBase.y} A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y} Z`;
           } else {
             return `M ${leftBase.x} ${leftBase.y} L ${tipX} ${tipY} L ${rightBase.x} ${rightBase.y} A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y} Z`;
           }
         } else {
-          // Rectangle logic (sticker style for stability)
+          // Rectangle logic
           const rectWidth = width * 0.9;
           const rectHeight = height * 0.9;
           const rectX = width * 0.05;
@@ -231,18 +238,20 @@
       };
       
       const svgSize = Math.max(width, height) + tailLength * 2 + 100;
-      const offsetX = (svgSize - width) / 2;
-      const offsetY = (svgSize - height) / 2;
+      
+      // We calculate center offset based on bubble position in canvas
+      const transX = bubbleX - width/2;
+      const transY = bubbleY - height/2;
       
       return (
         <svg 
-          ref={svgRef} // <-- NEW: Ref attached here
-          width={svgSize} 
-          height={svgSize} 
-          viewBox={`0 0 ${svgSize} ${svgSize}`} 
-          style={{ overflow: 'visible' }}
+          ref={svgRef} 
+          width="100%" 
+          height="100%" 
+          viewBox={`0 0 ${canvasW} ${canvasH}`} 
+          style={{ overflow: 'visible', position: 'absolute', top: 0, left: 0 }}
         >
-          <g transform={`translate(${offsetX}, ${offsetY})`}>
+          <g transform={`translate(${transX}, ${transY})`}>
             <path d={createCombinedPath()} fill="white" stroke="black" strokeWidth={strokeWidth} strokeLinejoin="round" />
             {isThoughtBubble && (
               <>
@@ -277,9 +286,8 @@
       );
     };
 
-    // --- MAIN APP COMPONENT ---
     function App() {
-      // Logic States
+      // App State
       const [angle, setAngle] = useState(270);
       const [shape, setShape] = useState('pill');
       const [font, setFont] = useState('Arial');
@@ -303,9 +311,14 @@
       const [isItalic, setIsItalic] = useState(false);
       const [isThoughtBubble, setIsThoughtBubble] = useState(false);
       
-      const svgRef = useRef(null); // <-- NEW: Creating the Ref
+      // Canvas State
+      const [bgImage, setBgImage] = useState(null);
+      const [canvasDim, setCanvasDim] = useState({ w: 800, h: 800 });
+      const [bubbleX, setBubbleX] = useState(400);
+      const [bubbleY, setBubbleY] = useState(400);
       
-      // UI States
+      const svgRef = useRef(null);
+      const fileInputRef = useRef(null);
       const [activeTab, setActiveTab] = useState('content');
 
       const fonts = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Times New Roman', 'Verdana'];
@@ -323,73 +336,79 @@
       
       const handleLinesChange = (newLines) => {
         setLines(newLines);
-        if (newLines > customText.length) {
-          setCustomText([...customText, ...Array(newLines - customText.length).fill('')]);
-        } else {
-          setCustomText(customText.slice(0, newLines));
+        setCustomText(newLines > customText.length ? [...customText, ...Array(newLines - customText.length).fill('')] : customText.slice(0, newLines));
+      };
+
+      const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if(file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+             const img = new Image();
+             img.onload = () => {
+                const newW = img.naturalWidth;
+                const newH = img.naturalHeight;
+                setCanvasDim({ w: newW, h: newH });
+                setBgImage(ev.target.result);
+                setBubbleX(newW/2);
+                setBubbleY(newH/2);
+             };
+             img.src = ev.target.result;
+          };
+          reader.readAsDataURL(file);
         }
       };
 
       const downloadPNG = () => {
-        const svgElement = svgRef.current; // <-- NEW: Using Ref instead of querySelector
+        const svgElement = svgRef.current;
         if (!svgElement) return;
 
-        const serializer = new XMLSerializer();
-        let svgData = serializer.serializeToString(svgElement);
-        
-        // Ensure namespace exists for data URI compatibility
-        if (!svgData.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
-            svgData = svgData.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-        }
-
         const canvas = document.createElement('canvas');
+        canvas.width = canvasDim.w;
+        canvas.height = canvasDim.h;
         const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        const width = shape === 'circle' ? size : size * aspectRatio;
-        const height = size;
-        const svgSize = Math.max(width, height) + (Math.max(width, height) * (tailLength / 100)) * 2 + 100;
-        
-        canvas.width = svgSize;
-        canvas.height = svgSize;
-        
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob((blob) => {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.download = 'speech-bubble.png';
-            link.href = url;
-            link.click();
-            URL.revokeObjectURL(url);
-          });
+
+        const drawSVG = () => {
+           const serializer = new XMLSerializer();
+           let svgData = serializer.serializeToString(svgElement);
+           if (!svgData.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+               svgData = svgData.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+           }
+           const svg64 = btoa(unescape(encodeURIComponent(svgData)));
+           const img = new Image();
+           img.onload = () => {
+              ctx.drawImage(img, 0, 0, canvasDim.w, canvasDim.h);
+              const link = document.createElement('a');
+              link.download = 'speech-bubble.png';
+              link.href = canvas.toDataURL('image/png');
+              link.click();
+           };
+           img.src = 'data:image/svg+xml;base64,' + svg64;
         };
-        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+
+        if (bgImage) {
+           const bg = new Image();
+           bg.onload = () => {
+              ctx.fillStyle = 'white';
+              ctx.fillRect(0,0,canvas.width, canvas.height);
+              ctx.drawImage(bg, 0, 0, canvasDim.w, canvasDim.h);
+              drawSVG();
+           };
+           bg.src = bgImage;
+        } else {
+           drawSVG();
+        }
       };
 
-      // Calculated Props
       const displayText = customText.slice(0, lines).join('\n');
       const width = shape === 'circle' ? size : size * aspectRatio;
       const height = size;
-
-      const TabButton = ({ id, label, icon: Icon }) => (
-        <button
-          onClick={() => setActiveTab(id)}
-          className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition-colors duration-200 flex items-center justify-center gap-2 ${
-            activeTab === id 
-              ? 'border-indigo-600 text-indigo-600 bg-indigo-50' 
-              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          <Icon />
-          {label}
-        </button>
-      );
+      const previewScale = Math.min(1, 800 / Math.max(canvasDim.w, canvasDim.h));
 
       return (
-        <div className="flex h-screen flex-col md:flex-row">
+        <div className="flex h-screen flex-col md:flex-row font-sans text-slate-800">
           
-          {/* LEFT SIDEBAR */}
+          {/* SIDEBAR */}
           <div className="w-full md:w-[400px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full z-10 shadow-lg">
             <div className="p-5 border-b border-slate-200 bg-slate-50">
               <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -398,183 +417,120 @@
             </div>
 
             <div className="flex border-b border-slate-200">
-              <TabButton id="content" label="Content" icon={Icons.Type} />
-              <TabButton id="shape" label="Shape" icon={Icons.Shape} />
-              <TabButton id="tail" label="Tail" icon={Icons.Tail} />
+              <button onClick={() => setActiveTab('content')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 ${activeTab === 'content' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500'}`}><Icons.Type/>Content</button>
+              <button onClick={() => setActiveTab('shape')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 ${activeTab === 'shape' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500'}`}><Icons.Shape/>Shape</button>
+              <button onClick={() => setActiveTab('tail')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 ${activeTab === 'tail' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500'}`}><Icons.Tail/>Tail</button>
+              <button onClick={() => setActiveTab('bg')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 ${activeTab === 'bg' ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-slate-500'}`}><Icons.Bg/>Bg</button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {/* CONTENT TAB */}
               {activeTab === 'content' && (
                 <div className="space-y-6 animate-fadeIn">
                   <div>
                     <SectionHeader title="Text Content" />
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 mb-4">
                       {Array.from({ length: lines }).map((_, i) => (
-                        <input
-                          key={i}
-                          type="text"
-                          value={customText[i] || ''}
-                          onChange={(e) => handleTextChange(i, e.target.value)}
-                          placeholder={`Line ${i + 1}`}
-                          className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                        />
+                        <input key={i} type="text" value={customText[i] || ''} onChange={(e) => handleTextChange(i, e.target.value)} placeholder={`Line ${i + 1}`} className="w-full p-2.5 border border-slate-300 rounded-md text-sm" />
                       ))}
                     </div>
-
                     <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm font-medium text-slate-600">Number of Lines</span>
+                      <span className="text-sm font-medium text-slate-600">Lines</span>
                       <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
                         {[1, 2, 3, 4, 5].map((num) => (
-                          <button
-                            key={num}
-                            onClick={() => handleLinesChange(num)}
-                            className={`w-8 h-8 rounded text-sm font-bold transition-all ${
-                              lines === num ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:bg-slate-200'
-                            }`}
-                          >
-                            {num}
-                          </button>
+                          <button key={num} onClick={() => handleLinesChange(num)} className={`w-8 h-8 rounded text-sm font-bold ${lines === num ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:bg-slate-200'}`}>{num}</button>
                         ))}
                       </div>
                     </div>
                   </div>
-
                   <div>
                     <SectionHeader title="Typography" />
-                    <div className="space-y-4">
-                      <div className="space-y-1">
-                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Font Family</label>
-                         <select
-                          value={font}
-                          onChange={(e) => setFont(e.target.value)}
-                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-md text-sm"
-                        >
-                          {fonts.map((f) => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
-                        </select>
-                      </div>
-
-                      <SliderControl label="Font Size" value={textSize} onChange={setTextSize} min={12} max={120} unit="px" />
-                      <SliderControl label="Line Spacing" value={lineSpacing} onChange={setLineSpacing} min={0.8} max={2.5} step={0.05} />
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                         <SliderControl label="Position X" value={textOffsetX} onChange={setTextOffsetX} min={-100} max={100} unit="px" />
-                         <SliderControl label="Position Y" value={textOffsetY} onChange={setTextOffsetY} min={-100} max={100} unit="px" />
-                      </div>
-
-                      <Toggle 
-                        label="Italicize All Text" 
-                        checked={isItalic} 
-                        onChange={setIsItalic} 
-                        helpText="Tip: You can also use *asterisks* in the text inputs for specific words." 
-                      />
+                    <select value={font} onChange={(e) => setFont(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-md text-sm mb-4">
+                      {fonts.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                    <SliderControl label="Font Size" value={textSize} onChange={setTextSize} min={12} max={120} />
+                    <SliderControl label="Line Spacing" value={lineSpacing} onChange={setLineSpacing} min={0.8} max={2.5} step={0.05} />
+                    <div className="grid grid-cols-2 gap-4">
+                       <SliderControl label="Text X" value={textOffsetX} onChange={setTextOffsetX} min={-100} max={100} />
+                       <SliderControl label="Text Y" value={textOffsetY} onChange={setTextOffsetY} min={-100} max={100} />
                     </div>
+                    <Toggle label="Italic Text" checked={isItalic} onChange={setIsItalic} />
                   </div>
                 </div>
               )}
 
-              {/* SHAPE TAB */}
               {activeTab === 'shape' && (
                 <div className="space-y-6 animate-fadeIn">
                   <SectionHeader title="Bubble Style" />
-                  
                   <div className="grid grid-cols-3 gap-2 mb-6">
                     {shapes.map((s) => (
-                      <button
-                        key={s.value}
-                        onClick={() => setShape(s.value)}
-                        className={`py-2 px-2 text-sm rounded-md font-medium transition-all ${
-                          shape === s.value
-                            ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
+                      <button key={s.value} onClick={() => setShape(s.value)} className={`py-2 px-2 text-sm rounded-md font-medium transition-all ${shape === s.value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{s.label}</button>
                     ))}
                   </div>
-
-                  <Toggle 
-                    label="Thought Bubble Mode" 
-                    checked={isThoughtBubble} 
-                    onChange={setIsThoughtBubble} 
-                    helpText="Changes lines to cloudy scallops and adds thinking circles."
-                  />
-
+                  <Toggle label="Thought Bubble" checked={isThoughtBubble} onChange={setIsThoughtBubble} />
                   <SectionHeader title="Dimensions" />
-                  <SliderControl label="Overall Size" value={size} onChange={setSize} min={150} max={600} unit="px" />
-                  
-                  {shape !== 'circle' && (
-                    <SliderControl 
-                      label="Aspect Ratio" 
-                      value={aspectRatio} 
-                      onChange={setAspectRatio} 
-                      min={1} 
-                      max={3} 
-                      step={0.05}
-                      unit=":1"
-                    />
-                  )}
-
-                  <SliderControl label="Line Thickness" value={strokeWidth} onChange={setStrokeWidth} min={1} max={10} unit="px" />
+                  <SliderControl label="Size" value={size} onChange={setSize} min={150} max={600} />
+                  {shape !== 'circle' && <SliderControl label="Aspect Ratio" value={aspectRatio} onChange={setAspectRatio} min={1} max={3} step={0.05} />}
+                  <SliderControl label="Thickness" value={strokeWidth} onChange={setStrokeWidth} min={1} max={10} />
                 </div>
               )}
 
-              {/* TAIL TAB */}
               {activeTab === 'tail' && (
                 <div className="space-y-6 animate-fadeIn">
-                  <SectionHeader title="Position & Size" />
-                  
-                  <SliderControl label="Tail Angle" value={angle} onChange={setAngle} min={0} max={360} unit="°" />
-                  <SliderControl label="Tail Length" value={tailLength} onChange={setTailLength} min={5} max={60} unit="%" />
-                  <SliderControl label="Tail Base Width" value={tailWidth} onChange={setTailWidth} min={5} max={30} unit="%" />
-
-                  <SectionHeader title="Curvature (Physics)" />
-                  <p className="text-xs text-slate-500 mb-4 bg-slate-100 p-2 rounded">
-                    Adjust how the tail bends. Positive values curve one way, negative values curve the other.
-                  </p>
-                  <SliderControl label="Overall Curve" value={tailCurve} onChange={setTailCurve} min={-100} max={100} />
-                  
+                  <SectionHeader title="Tail Geometry" />
+                  <SliderControl label="Angle" value={angle} onChange={setAngle} min={0} max={360} unit="°" />
+                  <SliderControl label="Length" value={tailLength} onChange={setTailLength} min={5} max={60} unit="%" />
+                  <SliderControl label="Width" value={tailWidth} onChange={setTailWidth} min={5} max={30} unit="%" />
+                  <SliderControl label="Curve" value={tailCurve} onChange={setTailCurve} min={-100} max={100} />
                   <div className="border-t border-slate-100 pt-4 mt-4">
-                     <p className="text-xs font-bold text-slate-400 mb-2">Advanced Asymmetry</p>
-                     <SliderControl label="Left Side Curve" value={leftTailCurve} onChange={setLeftTailCurve} min={-80} max={80} />
-                     <SliderControl label="Right Side Curve" value={rightTailCurve} onChange={setRightTailCurve} min={-80} max={80} />
+                     <p className="text-xs font-bold text-slate-400 mb-2">Asymmetry</p>
+                     <SliderControl label="Left Curve" value={leftTailCurve} onChange={setLeftTailCurve} min={-80} max={80} />
+                     <SliderControl label="Right Curve" value={rightTailCurve} onChange={setRightTailCurve} min={-80} max={80} />
                   </div>
-
-                  <SectionHeader title="Manual Tip Offset" />
-                  <Toggle label="Enable Manual Offset" checked={useTailPosition} onChange={setUseTailPosition} />
-                  
+                  <SectionHeader title="Manual Offset" />
+                  <Toggle label="Enable Offset" checked={useTailPosition} onChange={setUseTailPosition} />
                   {useTailPosition && (
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 grid grid-cols-2 gap-4">
-                      <SliderControl label="X Offset" value={tailTipX} onChange={setTailTipX} min={-200} max={200} unit="px" />
-                      <SliderControl label="Y Offset" value={tailTipY} onChange={setTailTipY} min={-200} max={200} unit="px" />
+                      <SliderControl label="Tip X" value={tailTipX} onChange={setTailTipX} min={-200} max={200} />
+                      <SliderControl label="Tip Y" value={tailTipY} onChange={setTailTipY} min={-200} max={200} />
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'bg' && (
+                <div className="space-y-6 animate-fadeIn">
+                   <SectionHeader title="Background Image" />
+                   <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition cursor-pointer" onClick={()=>fileInputRef.current.click()}>
+                      <p className="text-sm text-slate-500 font-medium">Click to Upload</p>
+                      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                   </div>
+                   {bgImage && (
+                     <div className="text-center text-xs text-slate-500">
+                       Dimensions: {canvasDim.w} x {canvasDim.h}px
+                       <br/>
+                       <button onClick={()=>{setBgImage(null); setCanvasDim({w:800,h:800});}} className="text-red-500 underline mt-1">Remove Image</button>
+                     </div>
+                   )}
+                   <SectionHeader title="Bubble Position" />
+                   <SliderControl label="Position X" value={bubbleX} onChange={setBubbleX} min={0} max={canvasDim.w} />
+                   <SliderControl label="Position Y" value={bubbleY} onChange={setBubbleY} min={0} max={canvasDim.h} />
                 </div>
               )}
             </div>
 
-            {/* Footer / Action */}
             <div className="p-4 border-t border-slate-200 bg-slate-50">
-              <button
-                onClick={downloadPNG}
-                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-transform transform active:scale-95"
-              >
-                <Icons.Download />
-                Download PNG
+              <button onClick={downloadPNG} className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-6 rounded-lg shadow-lg">
+                <Icons.Download /> Download Result
               </button>
             </div>
           </div>
 
-          {/* RIGHT CANVAS AREA */}
+          {/* CANVAS AREA */}
           <div className="flex-1 bg-gray-200 flex items-center justify-center relative overflow-hidden checkerboard p-8">
-            <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-mono text-slate-500 border border-slate-200">
-              Canvas Preview
-            </div>
-            
-            <div className="transition-all duration-300 drop-shadow-2xl">
-              <SpeechBubble 
-                svgRef={svgRef} // <-- NEW: Ref attached here
+            <div className="relative shadow-2xl bg-white" style={{ width: canvasDim.w, height: canvasDim.h, transform: `scale(${previewScale})` }}>
+               {bgImage && <img src={bgImage} className="absolute inset-0 w-full h-full object-contain pointer-events-none" />}
+               <SpeechBubble 
+                svgRef={svgRef}
                 text={displayText}
                 tailAngle={angle}
                 width={width}
@@ -596,10 +552,14 @@
                 textOffsetY={textOffsetY}
                 isItalic={isItalic}
                 isThoughtBubble={isThoughtBubble}
+                // New Props
+                bubbleX={bubbleX}
+                bubbleY={bubbleY}
+                canvasW={canvasDim.w}
+                canvasH={canvasDim.h}
               />
             </div>
           </div>
-
         </div>
       );
     }
