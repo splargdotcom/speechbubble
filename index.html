@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Speech Bubble Designer Pro</title>
+  <title>Speech Bubble Designer Pro - Rich Text</title>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -28,6 +28,54 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
+
+    // --- PARSER HELPER ---
+    // Parses: **Bold**, *Italic*, [Color](red)
+    const parseFormattedText = (text) => {
+      if (!text) return [{ text: '', type: 'normal' }];
+      
+      const parts = [];
+      // Regex matches: [Color](Code) OR **Bold** OR *Italic*
+      // Priority is given to Color, then Bold, then Italic
+      const regex = /(\[.*?\]\(.*?\))|(\*\*.*?\*\*)|(\*.*?\*)/g;
+      
+      let lastIndex = 0;
+      let match;
+
+      while ((match = regex.exec(text)) !== null) {
+        // Push preceding plain text
+        if (match.index > lastIndex) {
+          parts.push({ text: text.substring(lastIndex, match.index), type: 'normal' });
+        }
+
+        const fullMatch = match[0];
+        
+        if (fullMatch.startsWith('[')) {
+            // Color: [Text](Color)
+            const content = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
+            if (content && content.length === 3) {
+                parts.push({ text: content[1], type: 'color', color: content[2] });
+            } else {
+                parts.push({ text: fullMatch, type: 'normal' });
+            }
+        } else if (fullMatch.startsWith('**')) {
+            // Bold: **Text**
+            parts.push({ text: fullMatch.slice(2, -2), type: 'bold' });
+        } else if (fullMatch.startsWith('*')) {
+            // Italic: *Text*
+            parts.push({ text: fullMatch.slice(1, -1), type: 'italic' });
+        }
+
+        lastIndex = regex.lastIndex;
+      }
+
+      // Push remaining text
+      if (lastIndex < text.length) {
+        parts.push({ text: text.substring(lastIndex), type: 'normal' });
+      }
+      
+      return parts.length > 0 ? parts : [{ text, type: 'normal' }];
+    };
 
     // --- ICONS ---
     const Icons = {
@@ -71,18 +119,15 @@
       </div>
     );
 
-    // --- LOGIC COMPONENT (Your Original Working Logic) ---
     const SpeechBubble = ({ 
       text, tailAngle = 270, width = 400, height = 300, shape = 'pill', fontFamily = 'Arial',
       tailWidthPercent = 25, tailLengthPercent = 15, textSize = 32, 
       tailCurve = 0, leftTailCurve = 0, rightTailCurve = 0, 
       tailTipX = 0, tailTipY = 0, useTailPosition = false, strokeWidth = 3,
       lineSpacing = 1.25, textOffsetX = 0, textOffsetY = 0, isItalic = false, isThoughtBubble = false,
-      // New Props for positioning
       bubbleX, bubbleY, canvasW, canvasH,
       svgRef
     }) => {
-      // Logic from your working file
       const tailLength = Math.max(width, height) * (tailLengthPercent / 100);
       const tailBaseWidth = Math.max(width, height) * (tailWidthPercent / 100);
       const angleRad = (tailAngle * Math.PI) / 180;
@@ -101,6 +146,7 @@
           const scale = Math.sqrt(1 / ((cosA * cosA) / (radiusX * radiusX) + (sinA * sinA) / (radiusY * radiusY)));
           return { x: centerX + cosA * scale, y: centerY + sinA * scale };
         } else {
+          // Rectangle Edge Calculation
           const rectWidth = width * 0.9 - inset * 2;
           const rectHeight = height * 0.9 - inset * 2;
           const halfW = rectWidth / 2;
@@ -127,11 +173,9 @@
       const tipY = useTailPosition ? baseTipY + tailTipY : baseTipY;
       const perpAngle = angleRad + Math.PI / 2;
       
-      // Strict Number enforcement to prevent crashes
       const safeTailCurve = Number(tailCurve) || 0;
       const safeLeftCurve = Number(leftTailCurve) || 0;
       const safeRightCurve = Number(rightTailCurve) || 0;
-
       const totalLeftCurve = safeTailCurve + safeLeftCurve;
       const totalRightCurve = safeTailCurve + safeRightCurve;
       
@@ -140,7 +184,6 @@
       const rightCurveControlX = rightBase.x * 0.7 + tipX * 0.3 + Math.cos(perpAngle) * totalRightCurve;
       const rightCurveControlY = rightBase.y * 0.7 + tipY * 0.3 + Math.sin(perpAngle) * totalRightCurve;
       
-      // Tip width logic
       const minTipWidth = tailBaseWidth * 0.02;
       const tipWidthAngle = (minTipWidth / (distanceToEdge + tailLength)) / 2;
       const leftTipAngle = angleRad - tipWidthAngle;
@@ -152,7 +195,6 @@
 
       const createCombinedPath = () => {
         if (isThoughtBubble) {
-          // Thought Bubble Logic
           if (shape === 'circle' || shape === 'pill') {
             const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
             const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
@@ -173,7 +215,6 @@
             }
             return scallops.join(' ') + ' Z';
           } else {
-            // Rectangle Thought Bubble
             const rectWidth = width * 0.9;
             const rectHeight = height * 0.9;
             const rectX = width * 0.05;
@@ -211,7 +252,7 @@
           }
         }
         
-        // Standard Bubble Path (Circle/Pill/Rect)
+        // --- STANDARD SHAPES (PILL / CIRCLE) ---
         if (shape === 'circle' || shape === 'pill') {
           const rx = shape === 'circle' ? Math.min(width, height) / 2 : width / 2;
           const ry = shape === 'circle' ? Math.min(width, height) / 2 : height / 2;
@@ -227,19 +268,53 @@
             return `M ${leftBase.x} ${leftBase.y} L ${tipX} ${tipY} L ${rightBase.x} ${rightBase.y} A ${rx} ${ry} 0 ${largeArcFlag} 1 ${leftBase.x} ${leftBase.y} Z`;
           }
         } else {
-          // Rectangle logic
+          // --- FIXED RECTANGLE LOGIC ---
           const rectWidth = width * 0.9;
           const rectHeight = height * 0.9;
           const rectX = width * 0.05;
           const rectY = height * 0.05;
-          const cornerRadius = 30;
-          return `M ${rectX + cornerRadius} ${rectY} L ${rectX + rectWidth - cornerRadius} ${rectY} Q ${rectX + rectWidth} ${rectY} ${rectX + rectWidth} ${rectY + cornerRadius} L ${rectX + rectWidth} ${rectY + rectHeight - cornerRadius} Q ${rectX + rectWidth} ${rectY + rectHeight} ${rectX + rectWidth - cornerRadius} ${rectY + rectHeight} L ${rectX + cornerRadius} ${rectY + rectHeight} Q ${rectX} ${rectY + rectHeight} ${rectX} ${rectY + rectHeight - cornerRadius} L ${rectX} ${rectY + cornerRadius} Q ${rectX} ${rectY} ${rectX + cornerRadius} ${rectY} Z M ${leftBase.x} ${leftBase.y} L ${tipX} ${tipY} L ${rightBase.x} ${rightBase.y} Z`;
+          const r = 30; // corner radius
+          const right = rectX + rectWidth;
+          const bottom = rectY + rectHeight;
+          
+          let deg = tailAngle % 360;
+          if (deg < 0) deg += 360;
+          
+          let tailStr = "";
+          if (safeTailCurve !== 0 || safeLeftCurve !== 0 || safeRightCurve !== 0) {
+             tailStr = `Q ${leftCurveControlX} ${leftCurveControlY} ${leftTipX} ${leftTipY} L ${rightTipX} ${rightTipY} Q ${rightCurveControlX} ${rightCurveControlY} ${rightBase.x} ${rightBase.y}`;
+          } else {
+             tailStr = `L ${tipX} ${tipY} L ${rightBase.x} ${rightBase.y}`;
+          }
+
+          let d = `M ${leftBase.x} ${leftBase.y} ${tailStr}`;
+          
+          if (deg >= 45 && deg < 135) { 
+            d += ` L ${rectX + r} ${bottom} Q ${rectX} ${bottom} ${rectX} ${bottom - r}`;
+            d += ` L ${rectX} ${rectY + r} Q ${rectX} ${rectY} ${rectX + r} ${rectY}`;
+            d += ` L ${right - r} ${rectY} Q ${right} ${rectY} ${right} ${rectY + r}`;
+            d += ` L ${right} ${bottom - r} Q ${right} ${bottom} ${right - r} ${bottom}`;
+          } else if (deg >= 135 && deg < 225) { 
+            d += ` L ${rectX} ${rectY + r} Q ${rectX} ${rectY} ${rectX + r} ${rectY}`;
+            d += ` L ${right - r} ${rectY} Q ${right} ${rectY} ${right} ${rectY + r}`;
+            d += ` L ${right} ${bottom - r} Q ${right} ${bottom} ${right - r} ${bottom}`;
+            d += ` L ${rectX + r} ${bottom} Q ${rectX} ${bottom} ${rectX} ${bottom - r}`;
+          } else if (deg >= 225 && deg < 315) { 
+            d += ` L ${right - r} ${rectY} Q ${right} ${rectY} ${right} ${rectY + r}`;
+            d += ` L ${right} ${bottom - r} Q ${right} ${bottom} ${right - r} ${bottom}`;
+            d += ` L ${rectX + r} ${bottom} Q ${rectX} ${bottom} ${rectX} ${bottom - r}`;
+            d += ` L ${rectX} ${rectY + r} Q ${rectX} ${rectY} ${rectX + r} ${rectY}`;
+          } else { 
+            d += ` L ${right} ${bottom - r} Q ${right} ${bottom} ${right - r} ${bottom}`;
+            d += ` L ${rectX + r} ${bottom} Q ${rectX} ${bottom} ${rectX} ${bottom - r}`;
+            d += ` L ${rectX} ${rectY + r} Q ${rectX} ${rectY} ${rectX + r} ${rectY}`;
+            d += ` L ${right - r} ${rectY} Q ${right} ${rectY} ${right} ${rectY + r}`;
+          }
+          
+          return d + " Z";
         }
       };
       
-      const svgSize = Math.max(width, height) + tailLength * 2 + 100;
-      
-      // We calculate center offset based on bubble position in canvas
       const transX = bubbleX - width/2;
       const transY = bubbleY - height/2;
       
@@ -259,24 +334,36 @@
                 <circle cx={tipX * 0.85 + centerX * 0.15} cy={tipY * 0.85 + centerY * 0.15} r={Math.max(width, height) * 0.025} fill="white" stroke="black" strokeWidth={strokeWidth} />
               </>
             )}
-            <text x={centerX + textOffsetX} y={centerY + textOffsetY} textAnchor="middle" dominantBaseline="middle" fontSize={textSize} fontWeight="bold" fontFamily={fontFamily} fontStyle={isItalic ? 'italic' : 'normal'}>
+            <text 
+              x={centerX + textOffsetX} 
+              y={centerY + textOffsetY} 
+              textAnchor="middle" 
+              dominantBaseline="middle" 
+              fontSize={textSize} 
+              fontFamily={fontFamily} 
+              // Removed global bold so inline formatting works
+            >
               {text.split('\n').map((line, i, arr) => {
-                const parts = [];
-                let currentText = '';
-                let isInItalic = false;
-                let charIndex = 0;
-                while (charIndex < line.length) {
-                  if (line[charIndex] === '*') {
-                    if (currentText) { parts.push({ text: currentText, italic: isInItalic }); currentText = ''; }
-                    isInItalic = !isInItalic; charIndex++;
-                  } else { currentText += line[charIndex]; charIndex++; }
-                }
-                if (currentText) parts.push({ text: currentText, italic: isInItalic });
+                const parts = parseFormattedText(line);
                 return (
                   <tspan key={i} x={centerX + textOffsetX} dy={i === 0 ? -((arr.length - 1) * (textSize * 0.6)) : textSize * lineSpacing}>
-                    {parts.map((part, partIndex) => (
-                      <tspan key={partIndex} fontStyle={part.italic ? 'italic' : (isItalic ? 'italic' : 'normal')}>{part.text}</tspan>
-                    ))}
+                    {parts.map((part, partIndex) => {
+                      // Determine props based on parsed type
+                      const isBold = part.type === 'bold';
+                      const isItalicPart = part.type === 'italic' || isItalic; // Allow global italic override
+                      const textColor = part.type === 'color' ? part.color : 'inherit';
+                      
+                      return (
+                        <tspan 
+                          key={partIndex} 
+                          fontWeight={isBold ? 'bold' : 'normal'} 
+                          fontStyle={isItalicPart ? 'italic' : 'normal'}
+                          fill={textColor}
+                        >
+                          {part.text}
+                        </tspan>
+                      );
+                    })}
                   </tspan>
                 );
               })}
@@ -292,7 +379,7 @@
       const [shape, setShape] = useState('pill');
       const [font, setFont] = useState('Arial');
       const [lines, setLines] = useState(3);
-      const [customText, setCustomText] = useState(['WHO\'S', 'SORRY', 'NOW?']);
+      const [customText, setCustomText] = useState(['WHO\'S', '[SORRY](red)', '**NOW?**']); // Updated demo text
       const [size, setSize] = useState(300);
       const [tailWidth, setTailWidth] = useState(10);
       const [tailLength, setTailLength] = useState(15);
@@ -433,6 +520,9 @@
                         <input key={i} type="text" value={customText[i] || ''} onChange={(e) => handleTextChange(i, e.target.value)} placeholder={`Line ${i + 1}`} className="w-full p-2.5 border border-slate-300 rounded-md text-sm" />
                       ))}
                     </div>
+                    <div className="text-xs text-slate-500 mb-4 bg-yellow-50 p-2 rounded border border-yellow-100">
+                      <strong>Formatting:</strong> **Bold**, *Italic*, [Red](red), [Blue](#00f)
+                    </div>
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-sm font-medium text-slate-600">Lines</span>
                       <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
@@ -453,7 +543,7 @@
                        <SliderControl label="Text X" value={textOffsetX} onChange={setTextOffsetX} min={-100} max={100} />
                        <SliderControl label="Text Y" value={textOffsetY} onChange={setTextOffsetY} min={-100} max={100} />
                     </div>
-                    <Toggle label="Italic Text" checked={isItalic} onChange={setIsItalic} />
+                    <Toggle label="Global Italic" checked={isItalic} onChange={setIsItalic} />
                   </div>
                 </div>
               )}
