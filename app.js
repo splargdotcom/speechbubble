@@ -14,6 +14,9 @@
   let selectedId = null;
   let interaction = null;
   let toastTimer = null;
+  let photopeaTransferPending = false;
+
+  const photopeaMode = new URLSearchParams(window.location.search).get("photopea") === "1";
 
   const state = {
     canvas: {
@@ -251,6 +254,106 @@
       textGroup.appendChild(text);
     });
     group.appendChild(textGroup);
+  }
+
+  function selectedBubbleBounds(bubble) {
+    const shapeScale = bubble.style === "thought" ? 0.6 : 0.5;
+    const bendPadding = bubble.style === "speech" ? Math.abs(bubble.tailBend) : 0;
+    const padding = Math.max(8, bubble.strokeWidth / 2 + 5) + bendPadding;
+    let left = bubble.x - bubble.width * shapeScale - padding;
+    let right = bubble.x + bubble.width * shapeScale + padding;
+    let top = bubble.y - bubble.height * shapeScale - padding;
+    let bottom = bubble.y + bubble.height * shapeScale + padding;
+
+    if (bubble.style !== "shout") {
+      left = Math.min(left, bubble.tailX - padding);
+      right = Math.max(right, bubble.tailX + padding);
+      top = Math.min(top, bubble.tailY - padding);
+      bottom = Math.max(bottom, bubble.tailY + padding);
+    }
+
+    const layout = layoutText(bubble);
+    const totalHeight = (layout.lines.length - 1) * layout.lineHeight;
+    const startY = bubble.y - totalHeight / 2;
+    layout.lines.forEach((line, index) => {
+      const lineY = startY + index * layout.lineHeight;
+      left = Math.min(left, bubble.x - line.width / 2 - 2);
+      right = Math.max(right, bubble.x + line.width / 2 + 2);
+      top = Math.min(top, lineY - layout.fontSize * 0.7);
+      bottom = Math.max(bottom, lineY + layout.fontSize * 0.7);
+    });
+
+    const x = Math.floor(left);
+    const y = Math.floor(top);
+    return {
+      x,
+      y,
+      width: Math.max(1, Math.ceil(right) - x),
+      height: Math.max(1, Math.ceil(bottom) - y)
+    };
+  }
+
+  function serialisedSelectedBubble() {
+    const bubble = selectedBubble();
+    if (!bubble) return null;
+    const sourceGroup = [...canvas.querySelectorAll(".bubble-layer")]
+      .find((group) => group.dataset.bubbleId === bubble.id);
+    if (!sourceGroup) return null;
+
+    const bounds = selectedBubbleBounds(bubble);
+    const output = svgElement("svg", {
+      width: bounds.width,
+      height: bounds.height,
+      viewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`
+    });
+    output.appendChild(sourceGroup.cloneNode(true));
+    return new XMLSerializer().serializeToString(output);
+  }
+
+  function svgDataUrl(svg) {
+    const bytes = new TextEncoder().encode(svg);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    }
+    return `data:image/svg+xml;base64,${window.btoa(binary)}`;
+  }
+
+  function insertInPhotopea() {
+    const svg = serialisedSelectedBubble();
+    if (!svg) {
+      toast("Select a bubble first");
+      return;
+    }
+    if (window.parent === window) {
+      toast("Open Speechbubble from Photopea's Plugins panel first");
+      return;
+    }
+
+    const bubble = selectedBubble();
+    const layerName = cleanLayerName(bubble.text).slice(0, 80) || "Speechbubble";
+    const script = [
+      "try {",
+      `app.open(${JSON.stringify(svgDataUrl(svg))}, null, true);`,
+      `if (app.activeDocument && app.activeDocument.activeLayer) app.activeDocument.activeLayer.name = ${JSON.stringify(layerName)};`,
+      "app.echoToOE('speechbubble:inserted');",
+      "} catch (error) {",
+      "app.echoToOE('speechbubble:error:' + error.toString());",
+      "}"
+    ].join("\n");
+
+    photopeaTransferPending = true;
+    byId("insert-photopea").disabled = true;
+    byId("insert-photopea").textContent = "Inserting…";
+    window.parent.postMessage(script, "*");
+  }
+
+  function finishPhotopeaTransfer(message) {
+    photopeaTransferPending = false;
+    byId("insert-photopea").disabled = false;
+    byId("insert-photopea").textContent = "Insert in Photopea";
+    toast(message);
   }
 
   function renderSelection(bubble) {
@@ -830,6 +933,20 @@
   byId("canvas-height").addEventListener("change", (event) => resizeCanvas(state.canvas.width, Number(event.target.value), false));
   byId("export-svg").addEventListener("click", exportSvg);
   byId("export-png").addEventListener("click", exportPng);
+  byId("insert-photopea").addEventListener("click", insertInPhotopea);
+
+  window.addEventListener("message", (event) => {
+    if (!photopeaMode || event.source !== window.parent || typeof event.data !== "string") return;
+    if (event.data === "speechbubble:inserted") {
+      finishPhotopeaTransfer("Bubble inserted into Photopea");
+    } else if (event.data.startsWith("speechbubble:error:")) {
+      finishPhotopeaTransfer("Photopea could not insert that bubble");
+    } else if (event.data === "done" && photopeaTransferPending) {
+      window.setTimeout(() => {
+        if (photopeaTransferPending) finishPhotopeaTransfer("Bubble sent to Photopea");
+      }, 350);
+    }
+  });
 
   document.addEventListener("keydown", (event) => {
     const target = event.target;
@@ -875,5 +992,9 @@
     window.addEventListener("resize", fitCanvas);
   }
 
+  if (photopeaMode) {
+    document.body.classList.add("photopea-mode");
+    byId("insert-photopea").hidden = false;
+  }
   syncAll();
 }());

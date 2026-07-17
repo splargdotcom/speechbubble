@@ -18,6 +18,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -154,6 +158,20 @@ textarea:focus-visible {
 
 .button-primary:hover {
   background: #36322d;
+}
+
+.button-photopea {
+  color: #fff;
+  background: #3154d8;
+}
+
+.button-photopea:hover {
+  background: #243fae;
+}
+
+.button-photopea:disabled {
+  cursor: wait;
+  opacity: .62;
 }
 
 .button-secondary {
@@ -825,6 +843,25 @@ input[type="range"] {
 
   .brand strong {
     font-size: 18px;
+  }
+
+  .photopea-mode .topbar {
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+
+  .photopea-mode .brand span,
+  .photopea-mode #duplicate-bubble,
+  .photopea-mode #send-backward,
+  .photopea-mode #bring-forward {
+    display: none;
+  }
+
+  .photopea-mode .button-photopea {
+    min-height: 38px;
+    padding: 7px 11px;
+    font-size: 12px;
   }
 
   .top-actions .button-primary {
