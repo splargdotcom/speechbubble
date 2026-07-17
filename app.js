@@ -200,11 +200,20 @@
     const bounds = Geometry.textBounds(bubble);
     const lineHeightRatio = 1.14;
     const minimum = 14;
-    const maximum = bubble.autoFit ? 110 : bubble.fontSize;
+    const requestedSize = Geometry.clamp(Number(bubble.fontSize) || 42, minimum, 110);
+
+    if (!bubble.autoFit) {
+      return {
+        lines: wrapText(bubble, requestedSize, bounds.width),
+        fontSize: requestedSize,
+        lineHeight: requestedSize * lineHeightRatio
+      };
+    }
+
     let chosen = minimum;
     let lines = wrapText(bubble, chosen, bounds.width);
 
-    for (let size = maximum; size >= minimum; size -= 1) {
+    for (let size = 110; size >= minimum; size -= 1) {
       const candidate = wrapText(bubble, size, bounds.width);
       if (candidate.length * size * lineHeightRatio <= bounds.height) {
         chosen = size;
@@ -402,9 +411,12 @@
     byId("font-bold").checked = bubble.bold;
     byId("font-italic").checked = bubble.italic;
     byId("auto-fit").checked = bubble.autoFit;
-    byId("font-size").value = bubble.fontSize;
-    byId("font-size").disabled = bubble.autoFit;
-    byId("font-size-output").textContent = bubble.fontSize;
+    const effectiveFontSize = layoutText(bubble).fontSize;
+    byId("font-size").value = bubble.autoFit ? effectiveFontSize : bubble.fontSize;
+    byId("font-size").disabled = false;
+    byId("font-size-output").textContent = bubble.autoFit
+      ? `${effectiveFontSize} auto`
+      : bubble.fontSize;
 
     setSegmented("bubble-style", "style", bubble.style);
     byId("bubble-shape").value = bubble.shape;
@@ -754,7 +766,9 @@
   bindSelected("font-bold", "change", "bold", Boolean);
   bindSelected("font-italic", "change", "italic", Boolean);
   bindSelected("auto-fit", "change", "autoFit", Boolean, { inspector: true });
-  bindSelected("font-size", "input", "fontSize", Number);
+  byId("font-size").addEventListener("input", (event) => {
+    patchSelected({ fontSize: Number(event.target.value), autoFit: false }, { inspector: true });
+  });
   bindSelected("bubble-shape", "change", "shape");
   bindSelected("stroke-width", "change", "strokeWidth", Number);
   bindSelected("fill-colour", "input", "fill");
