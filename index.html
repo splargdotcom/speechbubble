@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f3eb">
   <meta name="description" content="A direct, browser-based speech bubble designer for comics and images.">
   <title>Speechbubble</title>
-  <link rel="stylesheet" href="styles.css?v=2.1.0">
+  <link rel="stylesheet" href="styles.css?v=2.2.0">
 </head>
 <body>
   <div class="app-shell">
@@ -23,6 +23,8 @@
       </div>
 
       <div class="top-actions" role="group" aria-label="Bubble actions">
+        <button class="icon-button" id="undo" type="button" title="Undo (Ctrl/⌘ + Z)" aria-label="Undo" disabled>↶</button>
+        <button class="icon-button" id="redo" type="button" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↷</button>
         <button class="button button-photopea" id="insert-photopea" type="button" hidden>Insert in Photopea</button>
         <button class="button button-primary" id="add-bubble" type="button">
           <span aria-hidden="true">＋</span> Add bubble
@@ -195,13 +197,16 @@
           <svg id="canvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Speech bubble canvas"></svg>
         </div>
       </div>
-      <p class="keyboard-hint">Arrow keys nudge · Shift moves farther · Delete removes · Ctrl/⌘ + D duplicates</p>
+      <p class="keyboard-hint">Arrow keys nudge · Shift moves farther · Delete removes · Ctrl/⌘ + D duplicates · Ctrl/⌘ + Z undoes</p>
     </main>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="geometry.js"></script>
-  <script src="app.js?v=2.1.0"></script>
+  <script src="geometry.js?v=2.2.0"></script>
+  <script src="editor-state.js?v=2.2.0"></script>
+  <script src="native-shape.js?v=2.2.0"></script>
+  <script src="photopea.js?v=2.2.0"></script>
+  <script src="app.js?v=2.2.0"></script>
 </body>
 </html>
