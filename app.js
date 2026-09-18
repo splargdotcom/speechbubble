@@ -3,6 +3,8 @@
 
   const SVG_NS = "http://www.w3.org/2000/svg";
   const Geometry = window.BubbleGeometry;
+  const Editor = window.SpeechbubbleState;
+  const history = Editor.createHistory();
   const byId = (id) => document.getElementById(id);
   const canvas = byId("canvas");
   const canvasFrame = byId("canvas-frame");
@@ -14,7 +16,10 @@
   let selectedId = null;
   let interaction = null;
   let toastTimer = null;
-  let photopeaTransferPending = false;
+  let photopeaTransferPending = null;
+  let photopeaTimer = null;
+  let backgroundRequest = 0;
+  const photopeaOrigin = "https://www.photopea.com";
 
   const photopeaMode = new URLSearchParams(window.location.search).get("photopea") === "1";
 
@@ -70,6 +75,26 @@
 
   function selectedBubble() {
     return state.bubbles.find((bubble) => bubble.id === selectedId) || null;
+  }
+
+  const snapshot = () => Editor.snapshot(state, selectedId);
+  function remember(key = null) {
+    history.record(snapshot(), key);
+    syncHistory();
+  }
+  function syncHistory() {
+    byId("undo").disabled = !history.canUndo;
+    byId("redo").disabled = !history.canRedo;
+  }
+  function restoreHistory(direction) {
+    if (interaction) return;
+    const previous = history[direction](snapshot());
+    if (!previous) return;
+    backgroundRequest += 1;
+    state.canvas = previous.canvas;
+    state.bubbles = previous.bubbles;
+    selectedId = previous.selectedId;
+    syncAll();
   }
 
   function svgElement(tag, attributes = {}) {
@@ -218,7 +243,7 @@
 
     for (let size = 110; size >= minimum; size -= 1) {
       const candidate = wrapText(bubble, size, bounds.width);
-      if (candidate.length * size * lineHeightRatio <= bounds.height) {
+      if (candidate.length * size * lineHeightRatio <= bounds.height && candidate.every((line) => line.width <= bounds.width)) {
         chosen = size;
         lines = candidate;
         break;
@@ -293,7 +318,7 @@
     };
   }
 
-  function serialisedSelectedBubble() {
+  function serialisedSelectedBubble(editable = false) {
     const bubble = selectedBubble();
     if (!bubble) return null;
     const sourceGroup = [...canvas.querySelectorAll(".bubble-layer")]
@@ -306,22 +331,31 @@
       height: bounds.height,
       viewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`
     });
-    output.appendChild(sourceGroup.cloneNode(true));
+    if (editable) {
+      output.appendChild(svgElement("path", { id: "bubble-preview", d: Geometry.bodyPath(bubble), fill: bubble.fill }));
+      const textGroup = svgElement("g", { id: "bubble-text" });
+      renderBubbleText(textGroup, bubble);
+      output.appendChild(textGroup);
+    } else output.appendChild(sourceGroup.cloneNode(true));
     return new XMLSerializer().serializeToString(output);
   }
 
-  function svgDataUrl(svg) {
-    const bytes = new TextEncoder().encode(svg);
+  function binaryDataUrl(bytes, type) {
     let binary = "";
     const chunkSize = 0x8000;
     for (let index = 0; index < bytes.length; index += chunkSize) {
       binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
     }
-    return `data:image/svg+xml;base64,${window.btoa(binary)}`;
+    return `data:${type};base64,${window.btoa(binary)}`;
+  }
+
+  function svgDataUrl(svg) {
+    return binaryDataUrl(new TextEncoder().encode(svg), "image/svg+xml");
   }
 
   function insertInPhotopea() {
-    const svg = serialisedSelectedBubble();
+    if (photopeaTransferPending) return;
+    const svg = serialisedSelectedBubble(true);
     if (!svg) {
       toast("Select a bubble first");
       return;
@@ -332,26 +366,31 @@
     }
 
     const bubble = selectedBubble();
-    const layerName = cleanLayerName(bubble.text).slice(0, 80) || "Speechbubble";
-    const script = [
-      "try {",
-      `app.open(${JSON.stringify(svgDataUrl(svg))}, null, true);`,
-      `if (app.activeDocument && app.activeDocument.activeLayer) app.activeDocument.activeLayer.name = ${JSON.stringify(layerName)};`,
-      "app.echoToOE('speechbubble:inserted');",
-      "} catch (error) {",
-      "app.echoToOE('speechbubble:error:' + error.toString());",
-      "}"
-    ].join("\n");
-
-    photopeaTransferPending = true;
+    const bounds = selectedBubbleBounds(bubble);
+    const token = `speechbubble:${uniqueId()}`;
+    let shapeUrl;
+    try {
+      shapeUrl = binaryDataUrl(window.SpeechbubbleShape.psd(Geometry.editablePaths(bubble), bounds, bubble.fill), "application/octet-stream");
+    } catch (error) {
+      toast("Could not prepare the editable bubble. Try a smaller bubble.");
+      return;
+    }
+    photopeaTransferPending = {
+      token, stage: "preparing", destination: null,
+      data: { dataUrl: svgDataUrl(svg), shapeUrl, name: cleanLayerName(bubble.text).slice(0, 80),
+        stroke: bubble.stroke, strokeWidth: bubble.strokeWidth, opacity: bubble.opacity,
+        width: bounds.width, height: bounds.height }
+    };
     byId("insert-photopea").disabled = true;
     byId("insert-photopea").textContent = "Inserting…";
-    window.parent.postMessage(script, "*");
+    photopeaTimer = window.setTimeout(() => finishPhotopeaTransfer("Photopea did not confirm insertion. Check its document tabs before trying again."), 40000);
+    window.parent.postMessage(window.SpeechbubblePhotopea.prepareScript(token), photopeaOrigin);
   }
 
   function finishPhotopeaTransfer(message) {
-    photopeaTransferPending = false;
-    byId("insert-photopea").disabled = false;
+    photopeaTransferPending = null;
+    window.clearTimeout(photopeaTimer);
+    byId("insert-photopea").disabled = !selectedBubble();
     byId("insert-photopea").textContent = "Insert in Photopea";
     toast(message);
   }
@@ -506,6 +545,7 @@
 
     const actionIds = ["duplicate-bubble", "send-backward", "bring-forward", "delete-bubble"];
     actionIds.forEach((id) => { byId(id).disabled = !bubble; });
+    byId("insert-photopea").disabled = !bubble || Boolean(photopeaTransferPending);
     if (!bubble) return;
 
     byId("text-input").value = bubble.text;
@@ -557,6 +597,7 @@
   }
 
   function syncAll() {
+    syncHistory();
     renderBubbleList();
     syncInspector();
     syncCanvasControls();
@@ -590,14 +631,22 @@
   function patchSelected(patch, options = {}) {
     const bubble = selectedBubble();
     if (!bubble) return;
+    if (Object.entries(patch).every(([key, value]) => bubble[key] === value)) return;
+    remember(`edit:${bubble.id}:${Object.keys(patch).join(",")}`);
     Object.assign(bubble, patch);
     constrainBubble(bubble);
     renderCanvas();
     if (options.list) renderBubbleList();
     if (options.inspector) syncInspector();
+    else if (bubble.autoFit) {
+      const size = layoutText(bubble).fontSize;
+      byId("font-size").value = size;
+      byId("font-size-output").textContent = `${size} auto`;
+    }
   }
 
   function addBubble() {
+    remember();
     const source = selectedBubble();
     const offset = state.bubbles.length * 24;
     const bubble = createBubble({
@@ -627,6 +676,7 @@
   function duplicateBubble() {
     const source = selectedBubble();
     if (!source) return;
+    remember();
     const bubble = {
       ...source,
       id: uniqueId(),
@@ -645,6 +695,7 @@
   function deleteBubble() {
     const index = state.bubbles.findIndex((bubble) => bubble.id === selectedId);
     if (index < 0) return;
+    remember();
     state.bubbles.splice(index, 1);
     selectedId = state.bubbles[Math.min(index, state.bubbles.length - 1)]?.id || null;
     syncAll();
@@ -655,6 +706,7 @@
     const index = state.bubbles.findIndex((bubble) => bubble.id === selectedId);
     const target = index + direction;
     if (index < 0 || target < 0 || target >= state.bubbles.length) return;
+    remember();
     [state.bubbles[index], state.bubbles[target]] = [state.bubbles[target], state.bubbles[index]];
     syncAll();
   }
@@ -668,6 +720,7 @@
   }
 
   function beginCanvasInteraction(event) {
+    if (interaction || event.isPrimary === false) return;
     if (event.button !== undefined && event.button !== 0) return;
     const handle = event.target.closest("[data-handle]");
     const bubbleTarget = event.target.closest("[data-bubble-id]");
@@ -698,21 +751,26 @@
     const bubble = selectedBubble();
     if (!bubble) return;
     const point = canvasPoint(event);
+    if (!interaction.recorded && (Math.abs(point.x - interaction.start.x) > 0.1 || Math.abs(point.y - interaction.start.y) > 0.1)) {
+      remember();
+      interaction.recorded = true;
+    }
 
     if (interaction.mode === "move") {
       const dx = point.x - interaction.start.x;
       const dy = point.y - interaction.start.y;
-      bubble.x = interaction.bubble.x + dx;
-      bubble.y = interaction.bubble.y + dy;
-      bubble.tailX = interaction.bubble.tailX + dx;
-      bubble.tailY = interaction.bubble.tailY + dy;
+      Editor.moveBubble(bubble, interaction.bubble, dx, dy, state.canvas);
     } else if (interaction.mode === "tail") {
       bubble.tailX = point.x;
       bubble.tailY = point.y;
     } else if (interaction.mode === "resize") {
-      const width = Math.max(120, Math.abs(point.x - bubble.x) * 2);
-      let height = Math.max(90, Math.abs(point.y - bubble.y) * 2);
-      if (event.shiftKey) height = width / (interaction.bubble.width / interaction.bubble.height);
+      let width = Math.max(120, (point.x - interaction.bubble.x) * 2);
+      let height = Math.max(90, (point.y - interaction.bubble.y) * 2);
+      if (event.shiftKey) {
+        const source = interaction.bubble;
+        const ratio = Geometry.clamp(Math.max(width / source.width, height / source.height), Math.max(120 / source.width, 90 / source.height), Math.min(state.canvas.width * 1.4 / source.width, state.canvas.height * 1.4 / source.height));
+        width = source.width * ratio; height = source.height * ratio;
+      }
       bubble.width = width;
       bubble.height = height;
     }
@@ -724,8 +782,8 @@
 
   function endCanvasInteraction(event) {
     if (!interaction || interaction.pointerId !== event.pointerId) return;
-    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     interaction = null;
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     syncInspector();
     renderBubbleList();
   }
@@ -743,11 +801,12 @@
     byId("zoom-readout").textContent = `${Math.round(scale * 100)}%`;
   }
 
-  function resizeCanvas(width, height, scaleContents) {
+  function resizeCanvas(width, height, scaleContents, record = true) {
     const oldWidth = state.canvas.width;
     const oldHeight = state.canvas.height;
-    const nextWidth = Geometry.clamp(Math.round(width), 320, 8000);
-    const nextHeight = Geometry.clamp(Math.round(height), 240, 8000);
+    const nextWidth = Geometry.clamp(Math.round(Number(width) || oldWidth), state.canvas.background ? 1 : 320, 8000);
+    const nextHeight = Geometry.clamp(Math.round(Number(height) || oldHeight), state.canvas.background ? 1 : 240, 8000);
+    if (record && (nextWidth !== oldWidth || nextHeight !== oldHeight)) remember();
 
     if (scaleContents) {
       const scaleX = nextWidth / oldWidth;
@@ -760,8 +819,8 @@
         bubble.tailY *= scaleY;
         bubble.width *= sizeScale;
         bubble.height *= sizeScale;
-        bubble.tailWidth *= sizeScale;
-        bubble.tailBend *= sizeScale;
+        bubble.tailWidth = Geometry.clamp(bubble.tailWidth * sizeScale, 25, 180);
+        bubble.tailBend = Geometry.clamp(bubble.tailBend * sizeScale, -140, 140);
         bubble.fontSize = Geometry.clamp(bubble.fontSize * sizeScale, 14, 110);
       });
     }
@@ -777,21 +836,33 @@
       toast("Please choose a PNG, JPEG, WebP or GIF image");
       return;
     }
+    const request = ++backgroundRequest;
     const reader = new FileReader();
     reader.onload = () => {
       const image = new Image();
       image.onload = () => {
-        state.canvas.background = {
-          dataUrl: reader.result,
-          name: file.name
-        };
-        resizeCanvas(image.naturalWidth, image.naturalHeight, true);
-        toast("Image added");
+        if (request !== backgroundRequest) return;
+        const dimensions = Editor.imageDimensions(image.naturalWidth, image.naturalHeight);
+        // Freeze animated GIFs and downsample once, so preview and export match.
+        const backgroundCanvas = document.createElement("canvas");
+        backgroundCanvas.width = dimensions.width;
+        backgroundCanvas.height = dimensions.height;
+        const context = backgroundCanvas.getContext("2d");
+        try {
+          if (!context) throw new Error("Image canvas is unavailable");
+          context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
+          const dataUrl = backgroundCanvas.toDataURL("image/png");
+          if (dataUrl === "data:,") throw new Error("Image is too large");
+          remember();
+          state.canvas.background = { dataUrl, name: file.name };
+          resizeCanvas(dimensions.width, dimensions.height, true, false);
+          toast(file.type === "image/gif" ? "Image added (still frame)" : "Image added");
+        } catch (error) { toast("That image is too large to open in this browser"); }
       };
-      image.onerror = () => toast("That image could not be opened");
+      image.onerror = () => { if (request === backgroundRequest) toast("That image could not be opened"); };
       image.src = reader.result;
     };
-    reader.onerror = () => toast("That image could not be read");
+    reader.onerror = () => { if (request === backgroundRequest) toast("That image could not be read"); };
     reader.readAsDataURL(file);
   }
 
@@ -838,16 +909,19 @@
       output.width = outputWidth;
       output.height = outputHeight;
       const context = output.getContext("2d");
-      context.drawImage(image, 0, 0, outputWidth, outputHeight);
-      URL.revokeObjectURL(url);
-      output.toBlob((blob) => {
-        if (!blob) {
-          toast("The PNG could not be created");
-          return;
-        }
-        triggerDownload(blob, "speechbubble.png");
-        toast(`${scale}× PNG downloaded`);
-      }, "image/png");
+      try {
+        if (!context) throw new Error("Export canvas is unavailable");
+        context.drawImage(image, 0, 0, outputWidth, outputHeight);
+        output.toBlob((blob) => {
+          if (!blob) {
+            toast("The PNG could not be created");
+            return;
+          }
+          triggerDownload(blob, "speechbubble.png");
+          toast(`${scale}× PNG downloaded`);
+        }, "image/png");
+      } catch (error) { toast("The PNG could not be created. Try a smaller scale."); }
+      finally { URL.revokeObjectURL(url); }
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
@@ -895,6 +969,8 @@
   byId("background-mode").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-background]");
     if (!button) return;
+    if (state.canvas.backgroundMode === button.dataset.background) return;
+    remember();
     state.canvas.backgroundMode = button.dataset.background;
     setSegmented("background-mode", "background", state.canvas.backgroundMode);
     renderCanvas();
@@ -910,6 +986,8 @@
   });
 
   byId("add-bubble").addEventListener("click", addBubble);
+  byId("undo").addEventListener("click", () => restoreHistory("undo"));
+  byId("redo").addEventListener("click", () => restoreHistory("redo"));
   byId("duplicate-bubble").addEventListener("click", duplicateBubble);
   byId("delete-bubble").addEventListener("click", deleteBubble);
   byId("send-backward").addEventListener("click", () => moveLayer(-1));
@@ -919,12 +997,15 @@
   canvas.addEventListener("pointermove", updateCanvasInteraction);
   canvas.addEventListener("pointerup", endCanvasInteraction);
   canvas.addEventListener("pointercancel", endCanvasInteraction);
+  canvas.addEventListener("lostpointercapture", endCanvasInteraction);
 
   byId("image-upload").addEventListener("change", (event) => {
     loadBackground(event.target.files[0]);
     event.target.value = "";
   });
   byId("remove-image").addEventListener("click", () => {
+    remember();
+    backgroundRequest += 1;
     state.canvas.background = null;
     syncAll();
     toast("Image removed");
@@ -936,22 +1017,49 @@
   byId("insert-photopea").addEventListener("click", insertInPhotopea);
 
   window.addEventListener("message", (event) => {
-    if (!photopeaMode || event.source !== window.parent || typeof event.data !== "string") return;
-    if (event.data === "speechbubble:inserted") {
-      finishPhotopeaTransfer("Bubble inserted into Photopea");
-    } else if (event.data.startsWith("speechbubble:error:")) {
-      finishPhotopeaTransfer("Photopea could not insert that bubble");
-    } else if (event.data === "done" && photopeaTransferPending) {
-      window.setTimeout(() => {
-        if (photopeaTransferPending) finishPhotopeaTransfer("Bubble sent to Photopea");
-      }, 350);
+    const transfer = photopeaTransferPending;
+    if (!photopeaMode || !transfer || event.source !== window.parent || event.origin !== photopeaOrigin || typeof event.data !== "string") return;
+    const prefix = transfer.token + ":";
+    if (event.data === prefix + "inserted" && transfer.stage === "finishing") {
+      finishPhotopeaTransfer("Editable bubble inserted into Photopea");
+    } else if (event.data === prefix + "shaped" && transfer.stage === "shaping") {
+      transfer.stage = "shaped";
+    } else if (event.data.startsWith(prefix + "error:")) {
+      finishPhotopeaTransfer(event.data.slice((prefix + "error:").length));
+    } else if (event.data.startsWith(prefix + "ready:") && transfer.stage === "preparing") {
+      try {
+        transfer.destination = JSON.parse(event.data.slice((prefix + "ready:").length));
+        const destination = transfer.destination;
+        if (!Number.isInteger(destination.index) || !Number.isInteger(destination.count) || destination.index < 0 || destination.index >= destination.count || typeof destination.name !== "string" || typeof destination.source !== "string") throw new Error("Invalid destination");
+        transfer.stage = "prepared";
+      } catch (error) { finishPhotopeaTransfer("Photopea returned an invalid response"); }
+    } else if (event.data === "done") {
+      if (transfer.stage === "prepared") {
+        transfer.stage = "opening";
+        window.parent.postMessage(window.SpeechbubblePhotopea.openScript(transfer.data.dataUrl, transfer.token), photopeaOrigin);
+      } else if (transfer.stage === "opening") {
+        transfer.stage = "opening-shape";
+        window.parent.postMessage(window.SpeechbubblePhotopea.openScript(transfer.data.shapeUrl, transfer.token), photopeaOrigin);
+      } else if (transfer.stage === "opening-shape") {
+        transfer.stage = "shaping";
+        window.parent.postMessage(window.SpeechbubblePhotopea.shapeScript(transfer.data, transfer.destination, transfer.token), photopeaOrigin);
+      } else if (transfer.stage === "shaped") {
+        transfer.stage = "finishing";
+        window.parent.postMessage(window.SpeechbubblePhotopea.finishScript(transfer.data, transfer.destination, transfer.token), photopeaOrigin);
+      }
     }
   });
 
   document.addEventListener("keydown", (event) => {
     const target = event.target;
-    const editing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+    const editing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target.isContentEditable;
     if (editing) return;
+
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && ["z", "y"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      restoreHistory(event.shiftKey || event.key.toLowerCase() === "y" ? "redo" : "undo");
+      return;
+    }
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
       event.preventDefault();
@@ -970,16 +1078,14 @@
       ArrowUp: [0, -1],
       ArrowDown: [0, 1]
     };
-    if (!directions[event.key]) return;
+    if (!directions[event.key] || event.ctrlKey || event.metaKey || event.altKey) return;
     const bubble = selectedBubble();
     if (!bubble) return;
     event.preventDefault();
     const amount = event.shiftKey ? 10 : 1;
     const [dx, dy] = directions[event.key];
-    bubble.x += dx * amount;
-    bubble.y += dy * amount;
-    bubble.tailX += dx * amount;
-    bubble.tailY += dy * amount;
+    remember(`nudge:${bubble.id}`);
+    Editor.moveBubble(bubble, { ...bubble }, dx * amount, dy * amount, state.canvas);
     constrainBubble(bubble);
     renderCanvas();
     syncInspector();

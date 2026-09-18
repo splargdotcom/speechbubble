@@ -11,6 +11,27 @@
 
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+  function ellipseBody(bubble) {
+    const rx = bubble.width / 2, ry = bubble.height / 2;
+    return `M ${bubble.x + rx} ${bubble.y} A ${rx} ${ry} 0 1 1 ${bubble.x - rx} ${bubble.y} A ${rx} ${ry} 0 1 1 ${bubble.x + rx} ${bubble.y} Z`;
+  }
+
+  function roundedBody(bubble) {
+    const x = bubble.x - bubble.width / 2, y = bubble.y - bubble.height / 2;
+    const w = bubble.width, h = bubble.height;
+    const r = clamp(Math.min(w, h) * 0.14, 18, 64);
+    return `M ${x + r} ${y} H ${x + w - r} A ${r} ${r} 0 0 1 ${x + w} ${y + r} V ${y + h - r} A ${r} ${r} 0 0 1 ${x + w - r} ${y + h} H ${x + r} A ${r} ${r} 0 0 1 ${x} ${y + h - r} V ${y + r} A ${r} ${r} 0 0 1 ${x + r} ${y} Z`;
+  }
+
+  function tailIsInside(bubble) {
+    const dx = Math.abs(bubble.tailX - bubble.x), dy = Math.abs(bubble.tailY - bubble.y);
+    const rx = bubble.width / 2, ry = bubble.height / 2;
+    if (bubble.shape !== "rounded") return (dx / rx) ** 2 + (dy / ry) ** 2 <= 1;
+    const r = clamp(Math.min(bubble.width, bubble.height) * 0.14, 18, 64);
+    if (dx > rx || dy > ry) return false;
+    return Math.max(0, dx - rx + r) ** 2 + Math.max(0, dy - ry + r) ** 2 <= r * r;
+  }
+
   function tailControls(baseA, tip, baseB, bend) {
     const angle = Math.atan2(tip.y - (baseA.y + baseB.y) / 2, tip.x - (baseA.x + baseB.x) / 2);
     const normal = { x: -Math.sin(angle), y: Math.cos(angle) };
@@ -26,15 +47,21 @@
     };
   }
 
-  function ovalSpeechPath(bubble) {
+  function ovalTail(bubble) {
     const rx = bubble.width / 2;
     const ry = bubble.height / 2;
     const tip = { x: bubble.tailX, y: bubble.tailY };
-    const theta = Math.atan2(tip.y - bubble.y, tip.x - bubble.x);
+    const theta = Math.atan2((tip.y - bubble.y) / ry, (tip.x - bubble.x) / rx);
     const delta = clamp(bubble.tailWidth / Math.max(80, Math.min(rx, ry) * 2), 0.08, 0.48);
     const baseA = pointOnEllipse(bubble.x, bubble.y, rx, ry, theta - delta);
     const baseB = pointOnEllipse(bubble.x, bubble.y, rx, ry, theta + delta);
-    const controls = tailControls(baseA, tip, baseB, bubble.tailBend);
+    return { baseA, baseB, tip, controls: tailControls(baseA, tip, baseB, bubble.tailBend) };
+  }
+
+  function ovalSpeechPath(bubble) {
+    if (tailIsInside(bubble)) return ellipseBody(bubble);
+    const rx = bubble.width / 2, ry = bubble.height / 2;
+    const { baseA, baseB, tip, controls } = ovalTail(bubble);
 
     return [
       `M ${baseA.x} ${baseA.y}`,
@@ -67,52 +94,69 @@
         });
       }
     });
-    return points;
+    // Include straight edges, so tails attach to the middle of a side too.
+    const sampled = [];
+    points.forEach((point, index) => {
+      const next = points[(index + 1) % points.length];
+      const steps = Math.max(1, Math.ceil(distance(point, next) / 8));
+      for (let step = 0; step < steps; step += 1) {
+        sampled.push({ x: lerp(point.x, next.x, step / steps), y: lerp(point.y, next.y, step / steps) });
+      }
+    });
+    return sampled;
   }
 
-  function perimeterLength(points) {
-    return points.reduce((total, point, index) => {
+  function roundedTail(bubble) {
+    const points = roundedRectPoints(bubble);
+    const tip = { x: bubble.tailX, y: bubble.tailY };
+    let closestLength = 0;
+    let closestDistance = Infinity;
+    let length = 0;
+    const lengths = [];
+
+    points.forEach((point, index) => {
+      lengths.push(length);
       const next = points[(index + 1) % points.length];
-      return total + distance(point, next);
-    }, 0);
+      const segment = distance(point, next);
+      const t = segment ? clamp(((tip.x - point.x) * (next.x - point.x) + (tip.y - point.y) * (next.y - point.y)) / (segment * segment), 0, 1) : 0;
+      const projected = { x: lerp(point.x, next.x, t), y: lerp(point.y, next.y, t) };
+      const current = distance(projected, tip);
+      if (current < closestDistance) {
+        closestDistance = current;
+        closestLength = length + t * segment;
+      }
+      length += segment;
+    });
+
+    const halfSpan = clamp(bubble.tailWidth / 2, 4, length / 5);
+    const at = (s) => {
+      const value = (s + length) % length;
+      let index = lengths.findIndex((start, i) => value >= start && value < (lengths[i + 1] ?? length));
+      if (index < 0) index = points.length - 1;
+      const next = points[(index + 1) % points.length];
+      const t = (value - lengths[index]) / distance(points[index], next);
+      return { x: lerp(points[index].x, next.x, t), y: lerp(points[index].y, next.y, t) };
+    };
+    const start = (closestLength + halfSpan) % length;
+    const travel = length - halfSpan * 2;
+    const remainder = points.map((point, i) => ({ point, offset: (lengths[i] - start + length) % length }))
+      .filter((item) => item.offset > 0 && item.offset < travel)
+      .sort((a, b) => a.offset - b.offset).map((item) => item.point);
+    const baseA = at(closestLength - halfSpan), baseB = at(closestLength + halfSpan);
+    const controls = tailControls(baseA, tip, baseB, bubble.tailBend);
+    return { baseA, baseB, tip, controls, remainder };
   }
 
   function roundedSpeechPath(bubble) {
-    const points = roundedRectPoints(bubble);
-    const tip = { x: bubble.tailX, y: bubble.tailY };
-    let closestIndex = 0;
-    let closestDistance = Infinity;
-
-    points.forEach((point, index) => {
-      const current = distance(point, tip);
-      if (current < closestDistance) {
-        closestDistance = current;
-        closestIndex = index;
-      }
-    });
-
-    const span = clamp(
-      Math.round((bubble.tailWidth / (2 * perimeterLength(points))) * points.length),
-      1,
-      Math.floor(points.length / 5)
-    );
-    const count = points.length;
-    const indexA = (closestIndex - span + count) % count;
-    const indexB = (closestIndex + span) % count;
-    const baseA = points[indexA];
-    const baseB = points[indexB];
-    const controls = tailControls(baseA, tip, baseB, bubble.tailBend);
+    if (tailIsInside(bubble)) return roundedBody(bubble);
+    const { baseA, baseB, tip, controls, remainder } = roundedTail(bubble);
     const commands = [
       `M ${baseA.x} ${baseA.y}`,
       `Q ${controls.a.x} ${controls.a.y} ${tip.x} ${tip.y}`,
       `Q ${controls.b.x} ${controls.b.y} ${baseB.x} ${baseB.y}`
     ];
 
-    let cursor = (indexB + 1) % count;
-    while (cursor !== indexA) {
-      commands.push(`L ${points[cursor].x} ${points[cursor].y}`);
-      cursor = (cursor + 1) % count;
-    }
+    remainder.forEach((point) => commands.push(`L ${point.x} ${point.y}`));
     commands.push(`L ${baseA.x} ${baseA.y} Z`);
     return commands.join(" ");
   }
@@ -138,7 +182,7 @@
 
   function thoughtDots(bubble) {
     const tip = { x: bubble.tailX, y: bubble.tailY };
-    const angle = Math.atan2(tip.y - bubble.y, tip.x - bubble.x);
+    const angle = Math.atan2((tip.y - bubble.y) / bubble.height, (tip.x - bubble.x) / bubble.width);
     const edge = pointOnEllipse(bubble.x, bubble.y, bubble.width / 2, bubble.height / 2, angle, 0.98);
     const minSize = Math.min(bubble.width, bubble.height);
     const fractions = [0.3, 0.58, 0.83];
@@ -172,6 +216,18 @@
     return bubble.shape === "rounded" ? roundedSpeechPath(bubble) : ovalSpeechPath(bubble);
   }
 
+  // Closed, consistently wound body/tail contours for vector editing.
+  function editablePath(bubble) {
+    if (bubble.style !== "speech") {
+      const dots = bubble.style === "thought" ? thoughtDots(bubble).map((dot) => ellipseBody({ x: dot.x, y: dot.y, width: dot.radius * 2, height: dot.radius * 2 })) : [];
+      return [bodyPath(bubble), ...dots].join(" ");
+    }
+    const body = bubble.shape === "rounded" ? roundedBody(bubble) : ellipseBody(bubble);
+    if (tailIsInside(bubble)) return body;
+    const { baseA, baseB, tip, controls } = bubble.shape === "rounded" ? roundedTail(bubble) : ovalTail(bubble);
+    return `${body} M ${baseA.x} ${baseA.y} Q ${controls.a.x} ${controls.a.y} ${tip.x} ${tip.y} Q ${controls.b.x} ${controls.b.y} ${baseB.x} ${baseB.y} L ${bubble.x} ${bubble.y} Z`;
+  }
+
   function textBounds(bubble) {
     if (bubble.style === "thought") {
       return { width: bubble.width * 0.68, height: bubble.height * 0.56 };
@@ -187,6 +243,8 @@
 
   window.BubbleGeometry = {
     bodyPath,
+    editablePath,
+    editablePaths: (bubble) => editablePath(bubble).split(/(?=M )/).map((part) => part.trim()).filter(Boolean),
     clamp,
     textBounds,
     thoughtDots

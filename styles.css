@@ -123,6 +123,8 @@ textarea:focus-visible {
 .top-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 7px;
 }
 
@@ -837,6 +839,16 @@ input[type="range"] {
 }
 
 @media (max-width: 520px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .top-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .brand-mark {
     width: 31px;
   }
