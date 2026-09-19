@@ -4,6 +4,12 @@ A direct, browser-based speech bubble designer for comics, photographs and memes
 
 **[Open Speechbubble](https://splargdotcom.github.io/speechbubble/)**
 
+<!-- site-screenshot:start -->
+<p align="center">
+  <a href="https://splargdotcom.github.io/speechbubble/"><img src="docs/screenshots/site.png" alt="Speechbubble live site screenshot" width="900"></a>
+</p>
+<!-- site-screenshot:end -->
+
 Speechbubble generates its artwork as procedural SVG. Bubbles remain crisp at any size, tails join the body cleanly, and uploaded images never leave the browser.
 
 ## What it does
