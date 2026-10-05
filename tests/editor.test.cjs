@@ -68,3 +68,54 @@ test('missing Photopea acknowledgement releases the insert button with an honest
   assert.equal(e.ids['insert-photopea'].disabled,false);
   assert.match(e.ids.toast.textContent,/did not confirm/);
 });
+
+const pointer=(e,name,target,x,y)=>e.ids.canvas.fire(name,{target,pointerId:1,isPrimary:true,button:0,clientX:x,clientY:y});
+const body=e=>e.ids.canvas.querySelectorAll('.bubble-body')[0];
+const key=(e,name)=>e.document.fire('keydown',{key:name,target:e.document.body});
+
+test('Escape cancels a drag without leaving an empty undo step',()=>{
+  const e=editor(); const before=body(e).getAttribute('d');
+  pointer(e,'pointerdown',body(e),600,355); pointer(e,'pointermove',body(e),700,400);
+  assert.notEqual(body(e).getAttribute('d'),before);
+  assert.equal(e.ids.undo.disabled,false);
+  key(e,'Escape');
+  assert.equal(body(e).getAttribute('d'),before);
+  assert.equal(e.ids.undo.disabled,true);
+  pointer(e,'pointerup',body(e),700,400);
+  assert.equal(body(e).getAttribute('d'),before);
+});
+
+test('Delete and arrow keys are ignored while a bubble is being dragged',()=>{
+  const e=editor();
+  pointer(e,'pointerdown',body(e),600,355); pointer(e,'pointermove',body(e),650,355);
+  const during=body(e).getAttribute('d');
+  key(e,'Delete'); key(e,'ArrowLeft');
+  assert.equal(e.ids.canvas.querySelectorAll('.bubble-layer').length,1);
+  assert.equal(body(e).getAttribute('d'),during);
+  pointer(e,'pointerup',body(e),650,355);
+  key(e,'Delete');
+  assert.equal(e.ids.canvas.querySelectorAll('.bubble-layer').length,0);
+});
+
+test('clicking empty canvas or pressing Escape deselects the bubble',()=>{
+  const e=editor();
+  pointer(e,'pointerdown',e.ids.canvas.querySelectorAll('.canvas-background')[0],20,20);
+  assert.equal(e.ids.canvas.querySelectorAll('.selection-ui').length,0);
+  assert.equal(e.ids['delete-bubble'].disabled,true);
+  pointer(e,'pointerdown',body(e),600,355); pointer(e,'pointerup',body(e),600,355);
+  assert.equal(e.ids.canvas.querySelectorAll('.selection-ui').length,1);
+  key(e,'Escape');
+  assert.equal(e.ids.canvas.querySelectorAll('.selection-ui').length,0);
+  assert.equal(e.ids.undo.disabled,true);
+});
+
+test('a value clamped back to the current one adds no undo step and resets the field',()=>{
+  const e=editor();
+  e.change('bubble-width','120');
+  e.change('bubble-height','200');
+  e.change('bubble-width','60');
+  assert.equal(String(e.ids['bubble-width'].value),'120');
+  e.ids.undo.click();
+  assert.equal(String(e.ids['bubble-height'].value),'300');
+  assert.equal(String(e.ids['bubble-width'].value),'120');
+});
