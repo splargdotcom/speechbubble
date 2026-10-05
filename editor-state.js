@@ -36,6 +36,8 @@
         lastKey = key; lastTime = now; redo.length = 0;
       },
       undo(current) { lastKey = null; if (!undo.length) return null; redo.push(current); return undo.pop(); },
+      // Drop the newest step, e.g. when a drag is cancelled before release.
+      discard() { lastKey = null; undo.pop(); },
       redo(current) { lastKey = null; if (!redo.length) return null; undo.push(current); return redo.pop(); },
       get canUndo() { return undo.length > 0; },
       get canRedo() { return redo.length > 0; }

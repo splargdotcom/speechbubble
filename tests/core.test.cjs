@@ -29,6 +29,21 @@ test('a tail dragged inside the body does not cut a hole in the bubble', () => {
   }
 });
 
+test('thought dots are hidden when the tail point is inside the cloud', () => {
+  const thought = { ...base, style: 'thought' };
+  assert.equal(G.thoughtDots(thought).length, 3);
+  assert.equal(G.thoughtDots({ ...thought, tailX: 650, tailY: 380 }).length, 0);
+  assert.equal(G.editablePaths({ ...thought, tailX: 650, tailY: 380 }).length, 1);
+});
+
+test('a discarded history step leaves earlier steps intact', () => {
+  const history = E.createHistory();
+  history.record('a', null, 0); history.record('b', null, 1000);
+  history.discard();
+  assert.equal(history.undo('current'), 'a');
+  assert.equal(history.canUndo, false);
+});
+
 test('rounded tails can attach at the centre of a straight edge at their requested width', () => {
   const d = G.bodyPath({ ...base, shape: 'rounded', tailX: 600, tailY: 650, tailWidth: 80 });
   const points = [...d.matchAll(/[MLQ] ([\d.e+-]+) ([\d.e+-]+)/g)];

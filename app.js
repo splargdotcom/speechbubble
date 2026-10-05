@@ -224,7 +224,22 @@
     return lines.length ? lines : [{ spans: [], width: 0 }];
   }
 
+  // Auto-fit wraps the text at up to 97 sizes. Dragging only moves a bubble,
+  // so reuse layouts instead of re-measuring every bubble on each pointermove.
+  const layoutCache = new Map();
   function layoutText(bubble) {
+    const key = JSON.stringify([bubble.text, bubble.width, bubble.height, bubble.style, bubble.shape,
+      bubble.fontFamily, bubble.fontSize, bubble.bold, bubble.italic, bubble.autoFit, bubble.textColour]);
+    let layout = layoutCache.get(key);
+    if (!layout) {
+      if (layoutCache.size >= 200) layoutCache.clear();
+      layout = computeLayout(bubble);
+      layoutCache.set(key, layout);
+    }
+    return layout;
+  }
+
+  function computeLayout(bubble) {
     const bounds = Geometry.textBounds(bubble);
     const lineHeightRatio = 1.14;
     const minimum = 14;
@@ -631,10 +646,15 @@
   function patchSelected(patch, options = {}) {
     const bubble = selectedBubble();
     if (!bubble) return;
-    if (Object.entries(patch).every(([key, value]) => bubble[key] === value)) return;
+    const next = { ...bubble, ...patch };
+    constrainBubble(next);
+    // A value clamped back to the current one is not an undoable edit.
+    if (Object.keys(next).every((key) => next[key] === bubble[key])) {
+      if (options.inspector) syncInspector();
+      return;
+    }
     remember(`edit:${bubble.id}:${Object.keys(patch).join(",")}`);
-    Object.assign(bubble, patch);
-    constrainBubble(bubble);
+    Object.assign(bubble, next);
     renderCanvas();
     if (options.list) renderBubbleList();
     if (options.inspector) syncInspector();
@@ -711,6 +731,28 @@
     syncAll();
   }
 
+  function selectBubble(id) {
+    if (selectedId === id) return;
+    selectedId = id;
+    renderBubbleList();
+    syncInspector();
+    renderCanvas();
+  }
+
+  function cancelCanvasInteraction() {
+    const bubble = selectedBubble();
+    const { pointerId, recorded, bubble: original } = interaction;
+    interaction = null;
+    if (bubble) Object.assign(bubble, original);
+    if (recorded) {
+      history.discard();
+      syncHistory();
+    }
+    if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+    renderCanvas();
+    syncInspector();
+  }
+
   function canvasPoint(event) {
     const bounds = canvas.getBoundingClientRect();
     return {
@@ -724,17 +766,15 @@
     if (event.button !== undefined && event.button !== 0) return;
     const handle = event.target.closest("[data-handle]");
     const bubbleTarget = event.target.closest("[data-bubble-id]");
-    if (!bubbleTarget) return;
+    if (!bubbleTarget) {
+      selectBubble(null);
+      return;
+    }
 
     const id = bubbleTarget.dataset.bubbleId;
     const bubble = state.bubbles.find((item) => item.id === id);
     if (!bubble) return;
-    if (selectedId !== id) {
-      selectedId = id;
-      renderBubbleList();
-      syncInspector();
-      renderCanvas();
-    }
+    selectBubble(id);
 
     interaction = {
       pointerId: event.pointerId,
@@ -978,11 +1018,7 @@
 
   byId("bubble-list").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-bubble-id]");
-    if (!button) return;
-    selectedId = button.dataset.bubbleId;
-    renderBubbleList();
-    syncInspector();
-    renderCanvas();
+    if (button) selectBubble(button.dataset.bubbleId);
   });
 
   byId("add-bubble").addEventListener("click", addBubble);
@@ -1002,6 +1038,26 @@
   byId("image-upload").addEventListener("change", (event) => {
     loadBackground(event.target.files[0]);
     event.target.value = "";
+  });
+  const imageFile = (items) => [...(items || [])].find((file) => file && /^image\//.test(file.type));
+  stage.addEventListener("dragover", (event) => {
+    if (![...(event.dataTransfer?.types || [])].includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  });
+  stage.addEventListener("drop", (event) => {
+    const files = event.dataTransfer?.files;
+    if (!files || !files.length) return;
+    event.preventDefault();
+    loadBackground(imageFile(files) || files[0]);
+  });
+  document.addEventListener("paste", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable) return;
+    const file = imageFile(event.clipboardData?.files);
+    if (!file) return;
+    event.preventDefault();
+    loadBackground(file);
   });
   byId("remove-image").addEventListener("click", () => {
     remember();
@@ -1053,7 +1109,20 @@
   document.addEventListener("keydown", (event) => {
     const target = event.target;
     const editing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target.isContentEditable;
-    if (editing) return;
+    if (editing || typeof event.key !== "string") return;
+
+    if (interaction) {
+      // Only Escape acts mid-drag; deleting or nudging would fight the pointer.
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelCanvasInteraction();
+      }
+      return;
+    }
+    if (event.key === "Escape") {
+      selectBubble(null);
+      return;
+    }
 
     if ((event.ctrlKey || event.metaKey) && !event.altKey && ["z", "y"].includes(event.key.toLowerCase())) {
       event.preventDefault();
@@ -1090,6 +1159,14 @@
     renderCanvas();
     syncInspector();
   });
+
+  if (document.fonts && typeof document.fonts.addEventListener === "function") {
+    document.fonts.addEventListener("loadingdone", () => {
+      layoutCache.clear();
+      renderCanvas();
+      syncInspector();
+    });
+  }
 
   if ("ResizeObserver" in window) {
     const resizeObserver = new ResizeObserver(fitCanvas);

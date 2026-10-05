@@ -182,6 +182,8 @@
 
   function thoughtDots(bubble) {
     const tip = { x: bubble.tailX, y: bubble.tailY };
+    // Like a speech tail, a point inside the cloud hides the trail of dots.
+    if (((tip.x - bubble.x) / (bubble.width / 2)) ** 2 + ((tip.y - bubble.y) / (bubble.height / 2)) ** 2 <= 1) return [];
     const angle = Math.atan2((tip.y - bubble.y) / bubble.height, (tip.x - bubble.x) / bubble.width);
     const edge = pointOnEllipse(bubble.x, bubble.y, bubble.width / 2, bubble.height / 2, angle, 0.98);
     const minSize = Math.min(bubble.width, bubble.height);
