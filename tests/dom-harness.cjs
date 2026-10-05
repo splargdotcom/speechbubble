@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function editor(photopea = false) {
+function editor(photopea = false, {storage} = {}) {
   class Element {
     constructor(tag) { this.tagName = tag; this.attributes = {}; this.dataset = {}; this.children = []; this.events = {}; this.style = {}; this.value = ''; this.disabled = false; this.clientWidth = 1000; this.clientHeight = 800; }
     setAttribute(key, value) { this.attributes[key] = String(value); if (['value','type','id'].includes(key)) this[key] = value; if (key.startsWith('data-')) this.dataset[key.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value; }
@@ -50,11 +50,22 @@ function editor(photopea = false) {
   const scripts = [], timers = new Map(); let timerId = 0, uuid = 0;
   const window = new Element('window');
   Object.assign(window, { location: {search:photopea?'?photopea=1':''}, crypto:{randomUUID:()=>`id-${++uuid}`}, CSS:{supports:()=>true}, setTimeout: fn => { timers.set(++timerId, fn); return timerId; }, clearTimeout: id=>timers.delete(id), btoa:s=>Buffer.from(s,'binary').toString('base64') });
+  if (storage) window.localStorage = storage;
+  const downloads = [];
   window.parent = photopea ? {postMessage:(script,origin)=>scripts.push({script,origin})} : window;
   const escape = text => String(text ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   function serialize(node) { return `<${node.tagName}${Object.entries(node.attributes).map(([k,v])=>` ${k}="${escape(v)}"`).join('')}>${escape(node.textContent)}${node.children.map(serialize).join('')}</${node.tagName}>`; }
-  const context = {window,document,CSS:window.CSS,HTMLInputElement:Input,HTMLTextAreaElement:Textarea,HTMLSelectElement:Select,URLSearchParams,TextEncoder,Blob,XMLSerializer:class { serializeToString(node) {return serialize(node);} },requestAnimationFrame:fn=>fn()};
+  const context = {window,document,CSS:window.CSS,HTMLInputElement:Input,HTMLTextAreaElement:Textarea,HTMLSelectElement:Select,URLSearchParams,TextEncoder,Blob,URL:{createObjectURL:blob=>{downloads.push(blob);return `blob:${downloads.length}`;},revokeObjectURL(){}},FileReader:class { readAsText(file) { this.result=file.text; this.onload(); } },XMLSerializer:class { serializeToString(node) {return serialize(node);} },requestAnimationFrame:fn=>fn()};
   for (const file of ['geometry.js','editor-state.js','native-shape.js','photopea.js','app.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context,{filename:file});
-  return {ids,document,window,scripts,timers,change(id,value,event='change') {ids[id].value=value; ids[id].fire(event);},message(data,origin='https://www.photopea.com',source=window.parent) {window.fire('message',{data,origin,source});}};
+  // Runs pending timers once, e.g. the debounced autosave.
+  const flush=()=>{const pending=[...timers.values()];timers.clear();pending.forEach(fn=>fn());};
+  return {ids,document,window,scripts,timers,downloads,flush,change(id,value,event='change') {ids[id].value=value; ids[id].fire(event);},message(data,origin='https://www.photopea.com',source=window.parent) {window.fire('message',{data,origin,source});}};
 }
-module.exports = {editor};
+// In-memory localStorage. Like a browser quota, the limit applies to the
+// total length of everything stored.
+function memoryStorage(limit = Infinity) {
+  const data = new Map();
+  const used = skip => [...data].reduce((total, [k, v]) => k === skip ? total : total + v.length, 0);
+  return {data,getItem:k=>data.has(k)?data.get(k):null,setItem(k,v){if(used(k)+String(v).length>limit)throw new Error('QuotaExceededError');data.set(k,String(v));},removeItem:k=>data.delete(k)};
+}
+module.exports = {editor, memoryStorage};

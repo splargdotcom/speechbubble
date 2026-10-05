@@ -16,11 +16,17 @@
   let selectedId = null;
   let interaction = null;
   let wordMode = false;
+  let selectedWord = null;
   let toastTimer = null;
   let photopeaTransferPending = null;
   let photopeaTimer = null;
   let backgroundRequest = 0;
   const photopeaOrigin = "https://www.photopea.com";
+  const fontFamilies = ["Arial", "Georgia", "Comic Sans MS", "Impact", "Courier New", "Verdana"];
+  const projectKey = "speechbubble:project";
+  const backgroundKey = "speechbubble:background";
+  let saveTimer = null;
+  let savedBackground = null;
 
   const photopeaMode = new URLSearchParams(window.location.search).get("photopea") === "1";
 
@@ -67,8 +73,9 @@
       bold: false,
       italic: false,
       autoFit: true,
-      // Dragged words, keyed "WORD#n" (nth occurrence), offset in ems.
-      wordOffsets: {},
+      // Edited words, keyed "WORD#n" (nth occurrence): { x, y } offset in
+      // ems of the bubble's text size and a size multiplier, { scale }.
+      words: {},
       ...overrides
     };
   }
@@ -200,10 +207,15 @@
     }
 
     parseInlineText(bubble.text, bubble).forEach((part) => {
-      const tokens = part.text.match(/\n|[^\S\n]+|[^\s\n]+/g) || [];
+      // "|" splits a word into separately editable pieces without a space.
+      const tokens = part.text.match(/\n|\||[^\S\n]+|[^\s|]+/g) || [];
       tokens.forEach((token) => {
         if (token === "\n") {
           newLine();
+          word = null;
+          return;
+        }
+        if (token === "|") {
           word = null;
           return;
         }
@@ -296,29 +308,67 @@
     return { lines: wrapped.lines, words: wordKeys(wrapped.words), fontSize: chosen, lineHeight: chosen * lineHeightRatio };
   }
 
-  // Position every span on the canvas, applying dragged-word offsets.
+  // Position every span on the canvas, applying edited words' offsets and
+  // sizes. Each edited word scales about its own centre.
   function placeText(bubble) {
     const layout = layoutText(bubble);
-    const offsets = bubble.wordOffsets || {};
+    const edits = bubble.words || {};
+    const size = layout.fontSize;
     const startY = bubble.y - (layout.lines.length - 1) * layout.lineHeight / 2;
     const lines = layout.lines.map((line, index) => {
       const y = startY + index * layout.lineHeight;
-      let x = bubble.x - line.width / 2;
-      return line.spans.map((span) => {
-        const key = span.word === null ? null : layout.words[span.word];
-        const offset = key ? offsets[key] : null;
-        const placed = {
-          ...span,
-          key,
-          moved: Boolean(offset),
-          x: x + (offset ? offset[0] * layout.fontSize : 0),
-          y: y + (offset ? offset[1] * layout.fontSize : 0)
-        };
-        x += span.width;
+      let cursor = bubble.x - line.width / 2;
+      const spans = line.spans.map((span) => {
+        const placed = { ...span, key: span.word === null ? null : layout.words[span.word], moved: false, x: cursor, y, size };
+        cursor += span.width;
         return placed;
       });
+      for (let start = 0, end = 1; start < spans.length; start = end, end = start + 1) {
+        while (end < spans.length && spans[end].word === spans[start].word) end += 1;
+        const edit = spans[start].key ? edits[spans[start].key] : null;
+        if (!edit) continue;
+        const left = spans[start].x;
+        const width = spans[end - 1].x + spans[end - 1].width - left;
+        const shift = (width - width * edit.scale) / 2;
+        for (let i = start; i < end; i += 1) {
+          const span = spans[i];
+          span.moved = true;
+          span.x = left + shift + (span.x - left) * edit.scale + edit.x * size;
+          span.y = y + edit.y * size;
+          span.width *= edit.scale;
+          span.size = size * edit.scale;
+        }
+      }
+      return spans;
     });
-    return { lines, fontSize: layout.fontSize };
+    return { lines, fontSize: size, words: layout.words };
+  }
+
+  // Returns bubble.words with one word's edit changed. A word back in its
+  // place at its normal size has no edit at all.
+  function editWord(words, key, change, snap = false) {
+    const round = (value) => Math.round(value * 1000) / 1000;
+    const next = { x: 0, y: 0, scale: 1, ...(words || {})[key], ...change };
+    next.x = round(next.x);
+    next.y = round(next.y);
+    next.scale = round(Geometry.clamp(next.scale, 0.25, 5));
+    // Dropping a word near home snaps it back into the line.
+    if (snap && Math.hypot(next.x, next.y) < 0.1) { next.x = 0; next.y = 0; }
+    const result = { ...words };
+    if (!next.x && !next.y && next.scale === 1) delete result[key];
+    else result[key] = next;
+    return result;
+  }
+
+  function activeWord(bubble) {
+    return wordMode && bubble && selectedWord && layoutText(bubble).words.includes(selectedWord) ? selectedWord : null;
+  }
+
+  function selectWord(key) {
+    if (selectedWord === key) return;
+    selectedWord = key;
+    renderCanvas();
+    syncInspector();
   }
 
   // Unmoved words stay together as one <text> per line; each dragged word
@@ -330,7 +380,7 @@
       const group = span.moved ? span.word : "flow";
       if (!run || run.group !== group) {
         if (span.word === null) return;
-        run = { group, x: span.x, y: span.y, spans: [] };
+        run = { group, x: span.x, y: span.y, size: span.size, spans: [] };
         runs.push(run);
       }
       const last = run.spans[run.spans.length - 1];
@@ -349,7 +399,7 @@
         last.width += span.width;
         return;
       }
-      boxes.push({ word: span.word, key: span.key, line, moved: span.moved, x: span.x, y: span.y - placed.fontSize * 0.6, width: span.width, height: placed.fontSize * 1.2 });
+      boxes.push({ word: span.word, key: span.key, line, moved: span.moved, x: span.x, y: span.y - span.size * 0.6, width: span.width, height: span.size * 1.2 });
     }));
     return boxes;
   }
@@ -368,7 +418,7 @@
         y: run.y,
         "dominant-baseline": "middle",
         "font-family": bubble.fontFamily,
-        "font-size": placed.fontSize
+        "font-size": Math.round(run.size * 1000) / 1000
       });
       run.spans.forEach((span) => {
         const tspan = svgElement("tspan", {
@@ -401,12 +451,11 @@
     }
 
     // Include dragged words, which may sit outside the bubble.
-    const placed = placeText(bubble);
-    placed.lines.flat().forEach((span) => {
+    placeText(bubble).lines.flat().forEach((span) => {
       left = Math.min(left, span.x - 2);
       right = Math.max(right, span.x + span.width + 2);
-      top = Math.min(top, span.y - placed.fontSize * 0.7);
-      bottom = Math.max(bottom, span.y + placed.fontSize * 0.7);
+      top = Math.min(top, span.y - span.size * 0.7);
+      bottom = Math.max(bottom, span.y + span.size * 0.7);
     });
 
     const x = Math.floor(left);
@@ -508,9 +557,12 @@
       rx: 8
     }));
     if (wordMode) {
-      wordBoxes(placeText(bubble)).forEach((box) => {
+      const active = activeWord(bubble);
+      const boxes = wordBoxes(placeText(bubble));
+      boxes.forEach((box) => {
+        const classes = ["word-handle", box.moved ? "moved" : "", box.key === active ? "selected" : ""];
         group.appendChild(svgElement("rect", {
-          class: box.moved ? "word-handle moved" : "word-handle",
+          class: classes.filter(Boolean).join(" "),
           x: box.x - 2,
           y: box.y,
           width: box.width + 4,
@@ -520,6 +572,18 @@
           "data-word": box.key
         }));
       });
+      // The selected word's corner handle resizes it, like a bubble's.
+      const last = boxes.filter((box) => box.key === active).pop();
+      if (last) {
+        group.appendChild(svgElement("circle", {
+          class: "selection-handle word-size",
+          cx: last.x + last.width + 2,
+          cy: last.y + last.height,
+          r: 7,
+          "data-handle": "word-size",
+          "data-word": last.key
+        }));
+      }
     }
     group.appendChild(svgElement("circle", {
       class: "selection-handle resize",
@@ -605,6 +669,7 @@
 
     const selected = selectedBubble();
     if (selected) renderSelection(selected);
+    scheduleSave();
   }
 
   function cleanLayerName(text) {
@@ -612,6 +677,7 @@
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/\*\*/g, "")
       .replace(/\*/g, "")
+      .replace(/\|/g, "")
       .replace(/\s+/g, " ")
       .trim();
     return cleaned || "Empty bubble";
@@ -671,6 +737,15 @@
     byId("auto-fit").checked = bubble.autoFit;
     byId("drag-words").checked = wordMode;
     byId("reset-words").disabled = !hasMovedWords(bubble);
+    const active = activeWord(bubble);
+    byId("word-help").classList.toggle("is-hidden", !wordMode);
+    byId("word-size-field").classList.toggle("is-hidden", !active);
+    if (active) {
+      const scale = (bubble.words[active] || {}).scale || 1;
+      byId("word-size").value = Math.round(scale * 100);
+      byId("word-size-output").textContent = `${Math.round(scale * 100)}%`;
+      byId("word-size-label").textContent = `Size of “${active.replace(/#\d+$/, "")}”`;
+    }
     const effectiveFontSize = layoutText(bubble).fontSize;
     byId("font-size").value = bubble.autoFit ? effectiveFontSize : bubble.fontSize;
     byId("font-size").disabled = false;
@@ -836,6 +911,7 @@
   function selectBubble(id) {
     if (selectedId === id) return;
     selectedId = id;
+    selectedWord = null;
     renderBubbleList();
     syncInspector();
     renderCanvas();
@@ -877,15 +953,23 @@
     const bubble = state.bubbles.find((item) => item.id === id);
     if (!bubble) return;
     selectBubble(id);
+    const word = handle && handle.dataset.word ? handle.dataset.word : null;
+    selectWord(word);
 
     interaction = {
       pointerId: event.pointerId,
       mode: handle ? handle.dataset.handle : "move",
       start: canvasPoint(event),
       bubble: { ...bubble },
-      word: handle ? handle.dataset.word : null,
+      word,
       fontSize: layoutText(bubble).fontSize
     };
+    if (interaction.mode === "word-size") {
+      const boxes = wordBoxes(placeText(bubble)).filter((box) => box.key === word);
+      const left = Math.min(...boxes.map((box) => box.x)), right = Math.max(...boxes.map((box) => box.x + box.width));
+      const top = Math.min(...boxes.map((box) => box.y)), bottom = Math.max(...boxes.map((box) => box.y + box.height));
+      interaction.centre = { x: (left + right) / 2, y: (top + bottom) / 2 };
+    }
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
   }
@@ -905,16 +989,17 @@
       const dy = point.y - interaction.start.y;
       Editor.moveBubble(bubble, interaction.bubble, dx, dy, state.canvas);
     } else if (interaction.mode === "word") {
-      const original = interaction.bubble.wordOffsets || {};
-      const [startX, startY] = original[interaction.word] || [0, 0];
-      const round = (value) => Math.round(value * 1000) / 1000;
-      const dx = round(startX + (point.x - interaction.start.x) / interaction.fontSize);
-      const dy = round(startY + (point.y - interaction.start.y) / interaction.fontSize);
-      const offsets = { ...original };
-      // Dropping a word near home snaps it back into the line.
-      if (Math.hypot(dx, dy) < 0.1) delete offsets[interaction.word];
-      else offsets[interaction.word] = [dx, dy];
-      bubble.wordOffsets = offsets;
+      const original = interaction.bubble.words;
+      const edit = original[interaction.word] || { x: 0, y: 0 };
+      bubble.words = editWord(original, interaction.word, {
+        x: edit.x + (point.x - interaction.start.x) / interaction.fontSize,
+        y: edit.y + (point.y - interaction.start.y) / interaction.fontSize
+      }, true);
+    } else if (interaction.mode === "word-size") {
+      const original = interaction.bubble.words;
+      const { centre, start } = interaction;
+      const ratio = Math.hypot(point.x - centre.x, point.y - centre.y) / Math.max(1, Math.hypot(start.x - centre.x, start.y - centre.y));
+      bubble.words = editWord(original, interaction.word, { scale: ((original[interaction.word] || {}).scale || 1) * ratio });
     } else if (interaction.mode === "tail") {
       bubble.tailX = point.x;
       bubble.tailY = point.y;
@@ -1021,6 +1106,218 @@
     reader.readAsDataURL(file);
   }
 
+  // Projects are plain JSON. Anything read back is checked field by field, so
+  // a damaged or hand-edited file cannot inject markup or break the editor.
+  function readBackground(raw) {
+    if (!raw || typeof raw.dataUrl !== "string" || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(raw.dataUrl)) return null;
+    return { dataUrl: raw.dataUrl, name: typeof raw.name === "string" ? raw.name.slice(0, 200) : "Image" };
+  }
+
+  function readBubble(raw) {
+    const base = createBubble();
+    const number = (value, fallback, min = -Infinity, max = Infinity) => Number.isFinite(value) ? Geometry.clamp(value, min, max) : fallback;
+    const colour = (value, fallback) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : fallback;
+    const choice = (value, options, fallback) => options.includes(value) ? value : fallback;
+    const words = {};
+    if (raw.words && typeof raw.words === "object") {
+      Object.entries(raw.words).slice(0, 1000).forEach(([key, edit]) => {
+        if (key.length > 300 || !/#\d+$/.test(key) || !edit || typeof edit !== "object") return;
+        const next = { x: number(edit.x, 0, -200, 200), y: number(edit.y, 0, -200, 200), scale: number(edit.scale, 1, 0.25, 5) };
+        if (next.x || next.y || next.scale !== 1) words[key] = next;
+      });
+    }
+    return {
+      ...base,
+      id: typeof raw.id === "string" && raw.id && raw.id.length <= 100 ? raw.id : base.id,
+      text: typeof raw.text === "string" ? raw.text.slice(0, 5000) : base.text,
+      x: number(raw.x, base.x),
+      y: number(raw.y, base.y),
+      width: number(raw.width, base.width),
+      height: number(raw.height, base.height),
+      style: choice(raw.style, ["speech", "thought", "shout"], base.style),
+      shape: choice(raw.shape, ["oval", "rounded"], base.shape),
+      tailX: number(raw.tailX, base.tailX),
+      tailY: number(raw.tailY, base.tailY),
+      tailWidth: number(raw.tailWidth, base.tailWidth, 25, 180),
+      tailBend: number(raw.tailBend, base.tailBend, -140, 140),
+      fill: colour(raw.fill, base.fill),
+      stroke: colour(raw.stroke, base.stroke),
+      strokeWidth: choice(raw.strokeWidth, [2, 4, 7, 11], base.strokeWidth),
+      opacity: number(raw.opacity, base.opacity, 10, 100),
+      fontFamily: choice(raw.fontFamily, fontFamilies, base.fontFamily),
+      fontSize: number(raw.fontSize, base.fontSize, 14, 110),
+      textColour: colour(raw.textColour, base.textColour),
+      bold: raw.bold === true,
+      italic: raw.italic === true,
+      autoFit: raw.autoFit !== false,
+      words
+    };
+  }
+
+  function readProject(data) {
+    if (!data || typeof data !== "object" || data.app !== "speechbubble" || !Array.isArray(data.bubbles)) {
+      throw new Error("Not a Speechbubble project");
+    }
+    const source = data.canvas && typeof data.canvas === "object" ? data.canvas : {};
+    const background = readBackground(source.background);
+    // Image canvases take the image's size, which may be below the minimum.
+    const fromImage = Boolean(background) || source.hasBackground === true;
+    const size = (value, min, fallback) => Number.isFinite(value) ? Geometry.clamp(Math.round(value), min, 8000) : fallback;
+    const ids = new Set();
+    const bubbles = data.bubbles.slice(0, 500).filter((item) => item && typeof item === "object").map((item) => {
+      const bubble = readBubble(item);
+      if (ids.has(bubble.id)) bubble.id = uniqueId();
+      ids.add(bubble.id);
+      return bubble;
+    });
+    return {
+      canvas: {
+        width: size(source.width, fromImage ? 1 : 320, 1200),
+        height: size(source.height, fromImage ? 1 : 240, 800),
+        background,
+        backgroundMode: source.backgroundMode === "transparent" ? "transparent" : "white"
+      },
+      bubbles,
+      selectedId: ids.has(data.selectedId) ? data.selectedId : null,
+      hasBackground: source.hasBackground === true
+    };
+  }
+
+  function projectData(includeBackground) {
+    const background = state.canvas.background;
+    return {
+      app: "speechbubble",
+      version: 1,
+      canvas: {
+        width: state.canvas.width,
+        height: state.canvas.height,
+        backgroundMode: state.canvas.backgroundMode,
+        background: includeBackground ? background : null,
+        hasBackground: Boolean(background)
+      },
+      bubbles: state.bubbles,
+      selectedId
+    };
+  }
+
+  function applyProject(project) {
+    backgroundRequest += 1;
+    state.canvas = project.canvas;
+    state.bubbles = project.bubbles;
+    state.bubbles.forEach(constrainBubble);
+    selectedId = project.selectedId;
+    selectedWord = null;
+  }
+
+  function storage() {
+    try {
+      return window.localStorage || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // The image is stored apart from the bubbles and rewritten only when it
+  // changes, so dragging never re-serialises megabytes of image data.
+  function autosave() {
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+    const store = storage();
+    if (!store) return;
+    try {
+      const background = state.canvas.background;
+      const dataUrl = background ? background.dataUrl : "";
+      if (dataUrl !== savedBackground) {
+        savedBackground = dataUrl;
+        try {
+          if (background) store.setItem(backgroundKey, JSON.stringify(background));
+          else store.removeItem(backgroundKey);
+        } catch (error) {
+          store.removeItem(backgroundKey);
+          toast("This image is too large to keep after a reload. Use Save project to keep a copy.");
+        }
+      }
+      const project = JSON.stringify(projectData(false));
+      try {
+        store.setItem(projectKey, project);
+      } catch (error) {
+        // Better to lose the stored image than to restore out-of-date bubbles.
+        store.removeItem(backgroundKey);
+        store.setItem(projectKey, project);
+        toast("This image is too large to keep after a reload. Use Save project to keep a copy.");
+      }
+    } catch (error) {
+      // Storage is full or blocked; editing still works without autosave.
+    }
+  }
+
+  function scheduleSave() {
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(autosave, 300);
+  }
+
+  function restoreAutosave() {
+    const store = storage();
+    if (!store) return;
+    try {
+      const saved = store.getItem(projectKey);
+      if (!saved) return;
+      const project = readProject(JSON.parse(saved));
+      if (project.hasBackground) {
+        project.canvas.background = readBackground(JSON.parse(store.getItem(backgroundKey) || "null"));
+        if (!project.canvas.background) toast("Your bubbles are back, but the image was too large to keep. Choose it again.");
+      }
+      savedBackground = project.canvas.background ? project.canvas.background.dataUrl : "";
+      applyProject(project);
+    } catch (error) {
+      // A damaged save starts a fresh canvas rather than a broken one.
+    }
+  }
+
+  function saveProjectFile() {
+    const blob = new Blob([JSON.stringify(projectData(true))], { type: "application/json" });
+    triggerDownload(blob, "speechbubble-project.json");
+    toast("Project saved");
+  }
+
+  function openProjectFile(file) {
+    if (!file) return;
+    if (file.size > 80 * 1024 * 1024) {
+      toast("That project file is too large");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      let project;
+      try {
+        project = readProject(JSON.parse(reader.result));
+      } catch (error) {
+        toast("That file is not a Speechbubble project");
+        return;
+      }
+      remember();
+      applyProject(project);
+      syncAll();
+      toast("Project opened");
+    };
+    reader.onerror = () => toast("That project file could not be read");
+    reader.readAsText(file);
+  }
+
+  function startOver() {
+    remember();
+    applyProject({
+      canvas: { width: 1200, height: 800, background: null, backgroundMode: "white" },
+      bubbles: [createBubble()],
+      selectedId: null
+    });
+    selectedId = state.bubbles[0].id;
+    syncAll();
+    toast("Started over. Undo brings your work back.");
+  }
+
+  const isProjectFile = (file) => Boolean(file) && (/\.json$/i.test(file.name || "") || file.type === "application/json");
+
   function serialisedSvg() {
     const clone = canvas.cloneNode(true);
     clone.querySelectorAll(".selection-ui").forEach((node) => node.remove());
@@ -1114,13 +1411,20 @@
   byId("font-size").addEventListener("input", (event) => { byId("font-size-output").textContent = event.target.value; });
   byId("drag-words").addEventListener("change", (event) => {
     wordMode = event.target.checked;
+    selectedWord = null;
+    syncInspector();
     byId("workspace-hint").innerHTML = wordMode
       ? "<strong>Drag</strong> a word to place it. Drop it back near its spot to rejoin the line."
       : "<strong>Drag</strong> the bubble, blue tail point or corner handle.";
     renderCanvas();
   });
+  byId("word-size").addEventListener("input", (event) => {
+    const bubble = selectedBubble(), key = activeWord(bubble);
+    if (!key) return;
+    patchSelected({ words: editWord(bubble.words, key, { scale: Number(event.target.value) / 100 }) }, { inspector: true });
+  });
   byId("reset-words").addEventListener("click", () => {
-    patchSelected({ wordOffsets: {} }, { inspector: true });
+    patchSelected({ words: {} }, { inspector: true });
     toast("Words returned to their lines");
   });
   byId("tail-width").addEventListener("input", (event) => { byId("tail-width-output").textContent = event.target.value; });
@@ -1175,7 +1479,9 @@
     const files = event.dataTransfer?.files;
     if (!files || !files.length) return;
     event.preventDefault();
-    loadBackground(imageFile(files) || files[0]);
+    const file = imageFile(files) || files[0];
+    if (isProjectFile(file)) openProjectFile(file);
+    else loadBackground(file);
   });
   document.addEventListener("paste", (event) => {
     const target = event.target;
@@ -1195,6 +1501,13 @@
   byId("canvas-width").addEventListener("change", (event) => resizeCanvas(Number(event.target.value), state.canvas.height, false));
   byId("canvas-height").addEventListener("change", (event) => resizeCanvas(state.canvas.width, Number(event.target.value), false));
   byId("export-svg").addEventListener("click", exportSvg);
+  byId("save-project").addEventListener("click", saveProjectFile);
+  byId("project-upload").addEventListener("change", (event) => {
+    openProjectFile(event.target.files[0]);
+    event.target.value = "";
+  });
+  byId("start-over").addEventListener("click", startOver);
+  window.addEventListener("pagehide", autosave);
   byId("export-png").addEventListener("click", exportPng);
   byId("insert-photopea").addEventListener("click", insertInPhotopea);
 
@@ -1246,7 +1559,8 @@
       return;
     }
     if (event.key === "Escape") {
-      selectBubble(null);
+      if (activeWord(selectedBubble())) selectWord(null);
+      else selectBubble(null);
       return;
     }
 
@@ -1263,7 +1577,9 @@
     }
     if (event.key === "Delete" || event.key === "Backspace") {
       event.preventDefault();
-      deleteBubble();
+      // Deleting the whole bubble would surprise someone working on a word.
+      if (activeWord(selectedBubble())) toast("To remove a word, edit the text");
+      else deleteBubble();
       return;
     }
 
@@ -1279,6 +1595,16 @@
     event.preventDefault();
     const amount = event.shiftKey ? 10 : 1;
     const [dx, dy] = directions[event.key];
+    const word = activeWord(bubble);
+    if (word) {
+      const edit = bubble.words[word] || { x: 0, y: 0 };
+      const size = layoutText(bubble).fontSize;
+      remember(`nudge-word:${bubble.id}:${word}`);
+      bubble.words = editWord(bubble.words, word, { x: edit.x + dx * amount / size, y: edit.y + dy * amount / size });
+      renderCanvas();
+      syncInspector();
+      return;
+    }
     remember(`nudge:${bubble.id}`);
     Editor.moveBubble(bubble, { ...bubble }, dx * amount, dy * amount, state.canvas);
     constrainBubble(bubble);
@@ -1305,5 +1631,6 @@
     document.body.classList.add("photopea-mode");
     byId("insert-photopea").hidden = false;
   }
+  restoreAutosave();
   syncAll();
 }());

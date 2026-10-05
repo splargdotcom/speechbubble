@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f3eb">
   <meta name="description" content="A direct, browser-based speech bubble designer for comics and images.">
   <title>Speechbubble</title>
-  <link rel="stylesheet" href="styles.css?v=2.4.0">
+  <link rel="stylesheet" href="styles.css?v=2.5.0">
 </head>
 <body>
   <div class="app-shell">
@@ -92,6 +92,11 @@
           <div class="toggle-row">
             <label class="check-button"><input id="drag-words" type="checkbox"><span>✥ Drag words</span></label>
             <button class="text-button neutral" id="reset-words" type="button" disabled>Reset words</button>
+          </div>
+          <p class="field-help is-hidden" id="word-help">Drag a word to move it. Click one, then drag its corner or use the slider to resize it. Type <code>|</code> inside a word, as in <code>SO|RRY</code>, to split it into pieces.</p>
+          <div class="range-field is-hidden" id="word-size-field">
+            <div class="range-heading"><label for="word-size" id="word-size-label">Word size</label><output id="word-size-output">100%</output></div>
+            <input id="word-size" type="range" min="25" max="500" step="5" value="100">
           </div>
         </section>
 
@@ -189,6 +194,14 @@
           </select>
           <button class="button button-secondary" id="export-svg" type="button">SVG</button>
         </div>
+
+        <div class="project-row">
+          <button class="button button-secondary" id="save-project" type="button">Save project</button>
+          <label class="button button-secondary upload-button" for="project-upload">Open project</label>
+          <input id="project-upload" type="file" accept=".json,application/json" hidden>
+          <button class="text-button" id="start-over" type="button">Start over</button>
+        </div>
+        <p class="field-help">Your work is kept in this browser automatically. Save a project file to keep a copy or move it to another device.</p>
       </section>
     </aside>
 
@@ -208,10 +221,10 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="geometry.js?v=2.4.0"></script>
-  <script src="editor-state.js?v=2.4.0"></script>
-  <script src="native-shape.js?v=2.4.0"></script>
-  <script src="photopea.js?v=2.4.0"></script>
-  <script src="app.js?v=2.4.0"></script>
+  <script src="geometry.js?v=2.5.0"></script>
+  <script src="editor-state.js?v=2.5.0"></script>
+  <script src="native-shape.js?v=2.5.0"></script>
+  <script src="photopea.js?v=2.5.0"></script>
+  <script src="app.js?v=2.5.0"></script>
 </body>
 </html>

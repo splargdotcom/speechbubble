@@ -22,9 +22,10 @@ Speechbubble generates its artwork as procedural SVG. Bubbles remain crisp at an
 - Choose speech, thought or shout styles.
 - Use oval or rounded speech bubbles with adjustable tails.
 - Automatically wrap and fit text.
-- Drag individual words anywhere, inside or outside the bubble.
+- Drag and resize individual words, inside or outside the bubble, and split words into pieces.
 - Format text with `**bold**`, `*italic*` and `[colour](#d62828)`.
 - Upload, drop or paste PNG, JPEG, WebP or GIF backgrounds.
+- Keep your work automatically in the browser, or save and open project files.
 - Export a transparent or white-background SVG.
 - Export PNG at 1×, 2× or 4× resolution.
 - Insert a selected bubble into Photopea as a group of native shape and text layers.
@@ -55,9 +56,17 @@ The shape is generated as a small native PSD and the text is imported from SVG. 
 - Use the arrow keys to nudge the selected bubble; hold Shift to move it farther.
 - Press Delete or Backspace to remove the selected bubble.
 - Turn on **Drag words** in the Text panel to move single words. Drop a word back near its spot to rejoin the line, or choose **Reset words** to return them all. Dragging the bubble outside its words still moves the whole bubble.
+- With **Drag words** on, click a word to select it, then drag its corner handle or use the size slider to resize it. Arrow keys nudge the selected word; Escape deselects it.
+- Type `|` inside a word to split it into pieces you can move separately: `SO|RRY` reads as SORRY but drags as SO and RRY.
 - Click an empty part of the canvas, or press Escape, to deselect. Escape during a drag cancels it.
 - Press Ctrl/⌘ + D to duplicate it.
 - Press Ctrl/⌘ + Z to undo, or Ctrl/⌘ + Shift + Z / Ctrl + Y to redo. Text fields retain their normal typing shortcuts; the toolbar undo buttons undo editor changes.
+
+## Saving
+
+Your work is saved in this browser as you go, and comes back when you reopen Speechbubble. A very large background image may not fit in the browser's storage; the bubbles are still kept, and you are told to choose the image again.
+
+**Save project** downloads a `.json` file containing the bubbles, word positions and background image. Open it with **Open project**, or drop it onto the canvas. **Start over** clears everything; Undo brings it back.
 
 ## Local use
 
@@ -79,11 +88,19 @@ Then open `http://localhost:8000`. You can also open `index.html` directly.
 - `editor-state.js` — undo/redo snapshots, bounded movement and image sizing.
 - `native-shape.js` — cubic vector contours and the native PSD shape writer.
 - `photopea.js` — guarded Photopea import, styling and grouping scripts.
-- `app.js` — canvas interaction, text layout, image loading and export.
+- `app.js` — canvas interaction, text layout, image loading, saving and export.
 - `speechbubble-photopea.json` — Photopea plugin manifest.
 - `photopea-icon.svg` — monochrome plugin-gallery icon.
 
 Everything is plain HTML, CSS and JavaScript so it remains easy to host on GitHub Pages and easy to alter without a toolchain.
+
+## Changes in 2.5.0
+
+- Resize individual words from their corner handle or a size slider; nudge a selected word with the arrow keys.
+- Split a word into separately movable pieces with `|`, as in `SO|RRY`.
+- Work is saved automatically in the browser and restored on reload.
+- Save and open project files, including the background image; **Start over** with Undo.
+- Delete no longer removes the whole bubble while a word is selected.
 
 ## Changes in 2.4.0
 
@@ -118,7 +135,7 @@ Run the dependency-free regression suite with Node.js 18 or newer:
 node --test tests/*.test.cjs
 ```
 
-Tests cover geometry, PSD path operations, undo/redo, image dimensions, editor events and Photopea message sequencing. The small DOM fixture does not emulate browser rendering or font metrics. Native insertion scripts and independent tail movement were also checked in the live Photopea editor; the complete plugin iframe flow and local responsive layout still need a browser smoke test after hosting this version.
+Tests cover geometry, PSD path operations, undo/redo, image dimensions, editor events, word editing, saving and Photopea message sequencing. The small DOM fixture does not emulate browser rendering or font metrics. Native insertion scripts and independent tail movement were also checked in the live Photopea editor; the complete plugin iframe flow and local responsive layout still need a browser smoke test after hosting this version.
 
 ## License
 
