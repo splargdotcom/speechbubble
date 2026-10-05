@@ -636,6 +636,10 @@ input[type="range"] {
   margin-top: 10px;
 }
 
+.project-row .button {
+  font-size: 13px;
+}
+
 .project-row + .field-help {
   margin-top: 8px;
 }

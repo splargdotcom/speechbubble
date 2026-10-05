@@ -91,6 +91,8 @@ Then open `http://localhost:8000`. You can also open `index.html` directly.
 - `app.js` — canvas interaction, text layout, image loading, saving and export.
 - `speechbubble-photopea.json` — Photopea plugin manifest.
 - `photopea-icon.svg` — monochrome plugin-gallery icon.
+- `favicon.svg`, `apple-touch-icon.png` — browser tab and home-screen icons.
+- `social-preview.png` — the image shown when the link is shared.
 
 Everything is plain HTML, CSS and JavaScript so it remains easy to host on GitHub Pages and easy to alter without a toolchain.
 
