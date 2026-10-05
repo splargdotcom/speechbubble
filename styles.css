@@ -589,6 +589,7 @@ input[type="range"] {
 
 .upload-row,
 .export-row,
+.project-row,
 .canvas-toggle {
   display: flex;
   align-items: center;
@@ -628,6 +629,15 @@ input[type="range"] {
 
 .export-row {
   margin-top: 18px;
+}
+
+.project-row {
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.project-row + .field-help {
+  margin-top: 8px;
 }
 
 .export-row .button-primary {
@@ -742,6 +752,15 @@ input[type="range"] {
 .word-handle:hover,
 .word-handle.moved {
   fill: rgb(33 102 243 / 10%);
+}
+
+.word-handle.selected {
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+
+.selection-handle.word-size {
+  cursor: nwse-resize;
 }
 
 .selection-handle.tail {
