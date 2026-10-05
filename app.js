@@ -15,6 +15,7 @@
   let nextId = 1;
   let selectedId = null;
   let interaction = null;
+  let wordMode = false;
   let toastTimer = null;
   let photopeaTransferPending = null;
   let photopeaTimer = null;
@@ -66,6 +67,8 @@
       bold: false,
       italic: false,
       autoFit: true,
+      // Dragged words, keyed "WORD#n" (nth occurrence), offset in ems.
+      wordOffsets: {},
       ...overrides
     };
   }
@@ -162,7 +165,7 @@
     if (!text) return;
     const last = line.spans[line.spans.length - 1];
     const width = measureText(text, style, fontSize, fontFamily);
-    if (last && styleKey(last) === styleKey(style)) {
+    if (last && styleKey(last) === styleKey(style) && last.word === style.word) {
       last.text += text;
       last.width += width;
     } else {
@@ -171,9 +174,13 @@
     line.width += width;
   }
 
+  // Returns wrapped lines whose spans carry the index of the word they belong
+  // to (null for spaces), plus the text of each word.
   function wrapText(bubble, fontSize, maxWidth) {
     const lines = [{ spans: [], width: 0 }];
+    const words = [];
     let pendingSpace = null;
+    let word = null;
 
     function currentLine() {
       return lines[lines.length - 1];
@@ -188,7 +195,7 @@
       for (const character of word) {
         const width = measureText(character, style, fontSize, bubble.fontFamily);
         if (currentLine().spans.length && currentLine().width + width > maxWidth) newLine();
-        appendSpan(currentLine(), character, style, fontSize, bubble.fontFamily);
+        appendSpan(currentLine(), character, { ...style, word }, fontSize, bubble.fontFamily);
       }
     }
 
@@ -197,12 +204,20 @@
       tokens.forEach((token) => {
         if (token === "\n") {
           newLine();
+          word = null;
           return;
         }
         if (/^\s+$/.test(token)) {
           pendingSpace = { text: " ", style: part };
+          word = null;
           return;
         }
+        // Formatting can change mid-word, e.g. **NO**W: it is still one word.
+        if (word === null) {
+          word = words.length;
+          words.push("");
+        }
+        words[word] += token;
 
         const line = currentLine();
         const wordWidth = measureText(token, part, fontSize, bubble.fontFamily);
@@ -212,16 +227,27 @@
 
         if (line.spans.length && line.width + spaceWidth + wordWidth > maxWidth) newLine();
         if (pendingSpace && currentLine().spans.length) {
-          appendSpan(currentLine(), " ", pendingSpace.style, fontSize, bubble.fontFamily);
+          appendSpan(currentLine(), " ", { ...pendingSpace.style, word: null }, fontSize, bubble.fontFamily);
         }
         pendingSpace = null;
 
         if (wordWidth > maxWidth) addLongWord(token, part);
-        else appendSpan(currentLine(), token, part, fontSize, bubble.fontFamily);
+        else appendSpan(currentLine(), token, { ...part, word }, fontSize, bubble.fontFamily);
       });
     });
 
-    return lines.length ? lines : [{ spans: [], width: 0 }];
+    return { lines, words };
+  }
+
+  // Name repeated words by occurrence, so a dragged word keeps its place when
+  // other words are added or removed, and editing the word itself resets it.
+  function wordKeys(words) {
+    const seen = new Map();
+    return words.map((word) => {
+      const count = seen.get(word) || 0;
+      seen.set(word, count + 1);
+      return `${word}#${count}`;
+    });
   }
 
   // Auto-fit wraps the text at up to 97 sizes. Dragging only moves a bubble,
@@ -246,43 +272,105 @@
     const requestedSize = Geometry.clamp(Number(bubble.fontSize) || 42, minimum, 110);
 
     if (!bubble.autoFit) {
+      const wrapped = wrapText(bubble, requestedSize, bounds.width);
       return {
-        lines: wrapText(bubble, requestedSize, bounds.width),
+        lines: wrapped.lines,
+        words: wordKeys(wrapped.words),
         fontSize: requestedSize,
         lineHeight: requestedSize * lineHeightRatio
       };
     }
 
     let chosen = minimum;
-    let lines = wrapText(bubble, chosen, bounds.width);
+    let wrapped = wrapText(bubble, chosen, bounds.width);
 
     for (let size = 110; size >= minimum; size -= 1) {
       const candidate = wrapText(bubble, size, bounds.width);
-      if (candidate.length * size * lineHeightRatio <= bounds.height && candidate.every((line) => line.width <= bounds.width)) {
+      if (candidate.lines.length * size * lineHeightRatio <= bounds.height && candidate.lines.every((line) => line.width <= bounds.width)) {
         chosen = size;
-        lines = candidate;
+        wrapped = candidate;
         break;
       }
     }
 
-    return { lines, fontSize: chosen, lineHeight: chosen * lineHeightRatio };
+    return { lines: wrapped.lines, words: wordKeys(wrapped.words), fontSize: chosen, lineHeight: chosen * lineHeightRatio };
+  }
+
+  // Position every span on the canvas, applying dragged-word offsets.
+  function placeText(bubble) {
+    const layout = layoutText(bubble);
+    const offsets = bubble.wordOffsets || {};
+    const startY = bubble.y - (layout.lines.length - 1) * layout.lineHeight / 2;
+    const lines = layout.lines.map((line, index) => {
+      const y = startY + index * layout.lineHeight;
+      let x = bubble.x - line.width / 2;
+      return line.spans.map((span) => {
+        const key = span.word === null ? null : layout.words[span.word];
+        const offset = key ? offsets[key] : null;
+        const placed = {
+          ...span,
+          key,
+          moved: Boolean(offset),
+          x: x + (offset ? offset[0] * layout.fontSize : 0),
+          y: y + (offset ? offset[1] * layout.fontSize : 0)
+        };
+        x += span.width;
+        return placed;
+      });
+    });
+    return { lines, fontSize: layout.fontSize };
+  }
+
+  // Unmoved words stay together as one <text> per line; each dragged word
+  // gets its own. A space next to a dragged word has nothing to separate.
+  function textRuns(spans) {
+    const runs = [];
+    let run = null;
+    spans.forEach((span) => {
+      const group = span.moved ? span.word : "flow";
+      if (!run || run.group !== group) {
+        if (span.word === null) return;
+        run = { group, x: span.x, y: span.y, spans: [] };
+        runs.push(run);
+      }
+      const last = run.spans[run.spans.length - 1];
+      if (last && styleKey(last) === styleKey(span)) last.text += span.text;
+      else run.spans.push({ ...span });
+    });
+    return runs;
+  }
+
+  function wordBoxes(placed) {
+    const boxes = [];
+    placed.lines.forEach((spans, line) => spans.forEach((span) => {
+      if (span.word === null) return;
+      const last = boxes[boxes.length - 1];
+      if (last && last.word === span.word && last.line === line) {
+        last.width += span.width;
+        return;
+      }
+      boxes.push({ word: span.word, key: span.key, line, moved: span.moved, x: span.x, y: span.y - placed.fontSize * 0.6, width: span.width, height: placed.fontSize * 1.2 });
+    }));
+    return boxes;
+  }
+
+  function hasMovedWords(bubble) {
+    return placeText(bubble).lines.some((spans) => spans.some((span) => span.moved));
   }
 
   function renderBubbleText(group, bubble) {
-    const layout = layoutText(bubble);
-    const totalHeight = (layout.lines.length - 1) * layout.lineHeight;
-    const startY = bubble.y - totalHeight / 2;
+    const placed = placeText(bubble);
     const textGroup = svgElement("g", { "pointer-events": "none", "aria-hidden": "true" });
 
-    layout.lines.forEach((line, index) => {
+    placed.lines.flatMap(textRuns).forEach((run) => {
       const text = svgElement("text", {
-        x: bubble.x - line.width / 2,
-        y: startY + index * layout.lineHeight,
+        x: run.x,
+        y: run.y,
         "dominant-baseline": "middle",
         "font-family": bubble.fontFamily,
-        "font-size": layout.fontSize
+        "font-size": placed.fontSize
       });
-      line.spans.forEach((span) => {
+      run.spans.forEach((span) => {
         const tspan = svgElement("tspan", {
           fill: span.colour,
           "font-weight": span.bold ? 700 : 400,
@@ -312,15 +400,13 @@
       bottom = Math.max(bottom, bubble.tailY + padding);
     }
 
-    const layout = layoutText(bubble);
-    const totalHeight = (layout.lines.length - 1) * layout.lineHeight;
-    const startY = bubble.y - totalHeight / 2;
-    layout.lines.forEach((line, index) => {
-      const lineY = startY + index * layout.lineHeight;
-      left = Math.min(left, bubble.x - line.width / 2 - 2);
-      right = Math.max(right, bubble.x + line.width / 2 + 2);
-      top = Math.min(top, lineY - layout.fontSize * 0.7);
-      bottom = Math.max(bottom, lineY + layout.fontSize * 0.7);
+    // Include dragged words, which may sit outside the bubble.
+    const placed = placeText(bubble);
+    placed.lines.flat().forEach((span) => {
+      left = Math.min(left, span.x - 2);
+      right = Math.max(right, span.x + span.width + 2);
+      top = Math.min(top, span.y - placed.fontSize * 0.7);
+      bottom = Math.max(bottom, span.y + placed.fontSize * 0.7);
     });
 
     const x = Math.floor(left);
@@ -421,6 +507,20 @@
       height: bubble.height + padding * 2,
       rx: 8
     }));
+    if (wordMode) {
+      wordBoxes(placeText(bubble)).forEach((box) => {
+        group.appendChild(svgElement("rect", {
+          class: box.moved ? "word-handle moved" : "word-handle",
+          x: box.x - 2,
+          y: box.y,
+          width: box.width + 4,
+          height: box.height,
+          rx: 4,
+          "data-handle": "word",
+          "data-word": box.key
+        }));
+      });
+    }
     group.appendChild(svgElement("circle", {
       class: "selection-handle resize",
       cx: bubble.x + bubble.width / 2,
@@ -569,6 +669,8 @@
     byId("font-bold").checked = bubble.bold;
     byId("font-italic").checked = bubble.italic;
     byId("auto-fit").checked = bubble.autoFit;
+    byId("drag-words").checked = wordMode;
+    byId("reset-words").disabled = !hasMovedWords(bubble);
     const effectiveFontSize = layoutText(bubble).fontSize;
     byId("font-size").value = bubble.autoFit ? effectiveFontSize : bubble.fontSize;
     byId("font-size").disabled = false;
@@ -780,7 +882,9 @@
       pointerId: event.pointerId,
       mode: handle ? handle.dataset.handle : "move",
       start: canvasPoint(event),
-      bubble: { ...bubble }
+      bubble: { ...bubble },
+      word: handle ? handle.dataset.word : null,
+      fontSize: layoutText(bubble).fontSize
     };
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -800,6 +904,17 @@
       const dx = point.x - interaction.start.x;
       const dy = point.y - interaction.start.y;
       Editor.moveBubble(bubble, interaction.bubble, dx, dy, state.canvas);
+    } else if (interaction.mode === "word") {
+      const original = interaction.bubble.wordOffsets || {};
+      const [startX, startY] = original[interaction.word] || [0, 0];
+      const round = (value) => Math.round(value * 1000) / 1000;
+      const dx = round(startX + (point.x - interaction.start.x) / interaction.fontSize);
+      const dy = round(startY + (point.y - interaction.start.y) / interaction.fontSize);
+      const offsets = { ...original };
+      // Dropping a word near home snaps it back into the line.
+      if (Math.hypot(dx, dy) < 0.1) delete offsets[interaction.word];
+      else offsets[interaction.word] = [dx, dy];
+      bubble.wordOffsets = offsets;
     } else if (interaction.mode === "tail") {
       bubble.tailX = point.x;
       bubble.tailY = point.y;
@@ -997,6 +1112,17 @@
   bindSelected("tail-bend", "input", "tailBend", Number);
 
   byId("font-size").addEventListener("input", (event) => { byId("font-size-output").textContent = event.target.value; });
+  byId("drag-words").addEventListener("change", (event) => {
+    wordMode = event.target.checked;
+    byId("workspace-hint").innerHTML = wordMode
+      ? "<strong>Drag</strong> a word to place it. Drop it back near its spot to rejoin the line."
+      : "<strong>Drag</strong> the bubble, blue tail point or corner handle.";
+    renderCanvas();
+  });
+  byId("reset-words").addEventListener("click", () => {
+    patchSelected({ wordOffsets: {} }, { inspector: true });
+    toast("Words returned to their lines");
+  });
   byId("tail-width").addEventListener("input", (event) => { byId("tail-width-output").textContent = event.target.value; });
   byId("tail-bend").addEventListener("input", (event) => { byId("tail-bend-output").textContent = event.target.value; });
 
