@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f3eb">
   <meta name="description" content="A direct, browser-based speech bubble designer for comics and images.">
   <title>Speechbubble</title>
-  <link rel="stylesheet" href="styles.css?v=2.3.0">
+  <link rel="stylesheet" href="styles.css?v=2.4.0">
 </head>
 <body>
   <div class="app-shell">
@@ -87,6 +87,11 @@
           <div class="range-field" id="font-size-field">
             <div class="range-heading"><label for="font-size">Text size</label><output id="font-size-output">42</output></div>
             <input id="font-size" type="range" min="14" max="110" step="1" value="42">
+          </div>
+
+          <div class="toggle-row">
+            <label class="check-button"><input id="drag-words" type="checkbox"><span>✥ Drag words</span></label>
+            <button class="text-button neutral" id="reset-words" type="button" disabled>Reset words</button>
           </div>
         </section>
 
@@ -189,7 +194,7 @@
 
     <main class="workspace">
       <div class="workspace-bar">
-        <p><strong>Drag</strong> the bubble, blue tail point or corner handle.</p>
+        <p id="workspace-hint"><strong>Drag</strong> the bubble, blue tail point or corner handle.</p>
         <span id="zoom-readout">100%</span>
       </div>
       <div class="stage" id="stage">
@@ -203,10 +208,10 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="geometry.js?v=2.3.0"></script>
-  <script src="editor-state.js?v=2.3.0"></script>
-  <script src="native-shape.js?v=2.3.0"></script>
-  <script src="photopea.js?v=2.3.0"></script>
-  <script src="app.js?v=2.3.0"></script>
+  <script src="geometry.js?v=2.4.0"></script>
+  <script src="editor-state.js?v=2.4.0"></script>
+  <script src="native-shape.js?v=2.4.0"></script>
+  <script src="photopea.js?v=2.4.0"></script>
+  <script src="app.js?v=2.4.0"></script>
 </body>
 </html>

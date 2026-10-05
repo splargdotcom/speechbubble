@@ -608,6 +608,15 @@ input[type="range"] {
   font-weight: 750;
 }
 
+.text-button.neutral {
+  color: var(--ink);
+}
+
+.text-button:disabled {
+  color: var(--muted);
+  text-decoration: none;
+}
+
 .text-button:hover {
   text-decoration: underline;
 }
@@ -718,6 +727,21 @@ input[type="range"] {
   stroke: var(--selection);
   stroke-width: 3;
   vector-effect: non-scaling-stroke;
+}
+
+.word-handle {
+  fill: transparent;
+  stroke: var(--selection);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: all;
+  cursor: move;
+}
+
+.word-handle:hover,
+.word-handle.moved {
+  fill: rgb(33 102 243 / 10%);
 }
 
 .selection-handle.tail {

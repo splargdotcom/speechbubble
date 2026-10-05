@@ -22,6 +22,7 @@ Speechbubble generates its artwork as procedural SVG. Bubbles remain crisp at an
 - Choose speech, thought or shout styles.
 - Use oval or rounded speech bubbles with adjustable tails.
 - Automatically wrap and fit text.
+- Drag individual words anywhere, inside or outside the bubble.
 - Format text with `**bold**`, `*italic*` and `[colour](#d62828)`.
 - Upload, drop or paste PNG, JPEG, WebP or GIF backgrounds.
 - Export a transparent or white-background SVG.
@@ -53,6 +54,7 @@ The shape is generated as a small native PSD and the text is imported from SVG. 
 - Drag the white corner point to resize it. Hold Shift to preserve its proportions.
 - Use the arrow keys to nudge the selected bubble; hold Shift to move it farther.
 - Press Delete or Backspace to remove the selected bubble.
+- Turn on **Drag words** in the Text panel to move single words. Drop a word back near its spot to rejoin the line, or choose **Reset words** to return them all. Dragging the bubble outside its words still moves the whole bubble.
 - Click an empty part of the canvas, or press Escape, to deselect. Escape during a drag cancels it.
 - Press Ctrl/⌘ + D to duplicate it.
 - Press Ctrl/⌘ + Z to undo, or Ctrl/⌘ + Shift + Z / Ctrl + Y to redo. Text fields retain their normal typing shortcuts; the toolbar undo buttons undo editor changes.
@@ -82,6 +84,11 @@ Then open `http://localhost:8000`. You can also open `index.html` directly.
 - `photopea-icon.svg` — monochrome plugin-gallery icon.
 
 Everything is plain HTML, CSS and JavaScript so it remains easy to host on GitHub Pages and easy to alter without a toolchain.
+
+## Changes in 2.4.0
+
+- Drag individual words with the new **Drag words** toggle. A dragged word moves with its bubble, scales with the text size, and keeps its place when other words are edited; changing the word itself returns it to the line.
+- Dragged words are separate text layers when inserted into Photopea, and are included in exports.
 
 ## Changes in 2.3.0
 

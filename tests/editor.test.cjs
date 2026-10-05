@@ -119,3 +119,69 @@ test('a value clamped back to the current one adds no undo step and resets the f
   assert.equal(String(e.ids['bubble-height'].value),'300');
   assert.equal(String(e.ids['bubble-width'].value),'120');
 });
+
+const texts=e=>e.ids.canvas.querySelectorAll('.bubble-layer')[0].querySelectorAll('text').map(t=>({text:t.querySelectorAll('tspan').map(n=>n.textContent).join(''),x:Number(t.getAttribute('x')),y:Number(t.getAttribute('y'))}));
+const wordHandle=(e,key)=>e.ids.canvas.querySelectorAll('.word-handle').find(n=>n.getAttribute('data-word')===key);
+const dragWord=(e,key,dx,dy)=>{const h=wordHandle(e,key),x=Number(h.getAttribute('x'))+5,y=Number(h.getAttribute('y'))+5;pointer(e,'pointerdown',h,x,y);pointer(e,'pointermove',h,x+dx,y+dy);pointer(e,'pointerup',h,x+dx,y+dy);};
+const fixedSize=e=>{e.ids['auto-fit'].checked=false;e.ids['auto-fit'].fire('change');};
+const wordMode=(e,on)=>{e.ids['drag-words'].checked=on;e.ids['drag-words'].fire('change');};
+
+test('Drag words shows a handle per word and moves only the dragged word',()=>{
+  const e=editor();
+  assert.equal(e.ids.canvas.querySelectorAll('.word-handle').length,0);
+  wordMode(e,true);
+  assert.deepEqual(e.ids.canvas.querySelectorAll('.word-handle').map(n=>n.getAttribute('data-word')),["WHO'S#0",'SORRY#0','NOW?#0']);
+  const before=texts(e);
+  assert.equal(e.ids['reset-words'].disabled,true);
+  dragWord(e,'SORRY#0',100,40);
+  const after=texts(e);
+  assert.deepEqual(after.map(t=>t.text),before.map(t=>t.text));
+  assert.equal(after[1].x-before[1].x,100); assert.equal(after[1].y-before[1].y,40);
+  assert.deepEqual([after[0],after[2]],[before[0],before[2]]);
+  assert.equal(e.ids['reset-words'].disabled,false);
+  e.ids.undo.click();
+  assert.deepEqual(texts(e),before);
+  e.ids.redo.click();
+  e.ids['reset-words'].click();
+  assert.deepEqual(texts(e),before);
+  assert.equal(e.ids['reset-words'].disabled,true);
+});
+
+test('a dragged word splits from its line, and dropping it home rejoins the line',()=>{
+  const e=editor(); fixedSize(e); e.change('text-input','ONE TWO THREE','input'); wordMode(e,true);
+  assert.deepEqual(texts(e).map(t=>t.text),['ONE TWO THREE']);
+  dragWord(e,'TWO#0',0,-60);
+  assert.deepEqual(texts(e).map(t=>t.text),['ONE ','TWO','THREE']);
+  dragWord(e,'TWO#0',1,61);
+  assert.deepEqual(texts(e).map(t=>t.text),['ONE TWO THREE']);
+});
+
+test('a dragged word keeps its place when other words change, and moves with its bubble',()=>{
+  const e=editor(); fixedSize(e); e.change('text-input','HEY YOU','input'); wordMode(e,true);
+  dragWord(e,'YOU#0',0,80);
+  const moved=texts(e).find(t=>t.text==='YOU');
+  e.change('text-input','OI YOU','input');
+  assert.equal(texts(e).find(t=>t.text==='YOU').y,moved.y);
+  e.change('text-input','OI YOU!','input');
+  assert.equal(texts(e).length,1);
+  e.change('text-input','OI YOU','input');
+  wordMode(e,false);
+  const before=texts(e).find(t=>t.text==='YOU');
+  pointer(e,'pointerdown',body(e),600,300); pointer(e,'pointermove',body(e),580,290); pointer(e,'pointerup',body(e),580,290);
+  const after=texts(e).find(t=>t.text==='YOU');
+  assert.ok(Math.abs(after.x-before.x+20)<1e-9); assert.ok(Math.abs(after.y-before.y+10)<1e-9);
+});
+
+test('Photopea insertion bounds include a word dragged outside the bubble',()=>{
+  const e=editor(true); wordMode(e,true);
+  dragWord(e,'NOW?#0',-400,0);
+  e.ids['insert-photopea'].click();
+  const token=e.scripts[0].script.match(/(speechbubble:id-\d+):ready:/)[1];
+  e.message(token+':ready:'+JSON.stringify({index:0,count:1,name:'Test',source:'local,test'}));
+  e.message('done');
+  const svg=Buffer.from(e.scripts[1].script.match(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/)[1],'base64').toString();
+  const [left]=svg.match(/viewBox="([^"]+)"/)[1].split(' ').map(Number);
+  const now=[...svg.matchAll(/<text x="([^"]+)"[^>]*>(?:<tspan[^>]*>[^<]*<\/tspan>)+/g)].find(m=>m[0].includes('NOW?'));
+  assert.ok(Number(now[1])>=left,`NOW? at ${now[1]} starts left of the inserted bounds ${left}`);
+  assert.ok(Number(now[1])<350);
+});
