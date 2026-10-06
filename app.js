@@ -22,8 +22,10 @@
   let photopeaTimer = null;
   let backgroundRequest = 0;
   const photopeaOrigin = "https://www.photopea.com";
-  const fontFamilies = ["Arial", "Georgia", "Comic Sans MS", "Impact", "Courier New", "Verdana",
-    "Comic Neue", "Patrick Hand", "Bangers", "Permanent Marker"];
+  const bundledFamilies = ["Comic Neue", "Patrick Hand", "Bangers", "Permanent Marker"];
+  const fontFamilies = ["Arial", "Georgia", "Comic Sans MS", "Impact", "Courier New", "Verdana", ...bundledFamilies];
+  let fontsSettled = false;
+  const fontWaiters = [];
   const Lines = window.SpeechbubbleLines;
   // app.js?v=… : load fonts.js with the same cache key.
   const assetQuery = document.currentScript && document.currentScript.src ? new URL(document.currentScript.src).search : "";
@@ -1591,7 +1593,7 @@
   });
   byId("canvas-width").addEventListener("change", (event) => resizeCanvas(Number(event.target.value), state.canvas.height, false));
   byId("canvas-height").addEventListener("change", (event) => resizeCanvas(state.canvas.width, Number(event.target.value), false));
-  byId("export-svg").addEventListener("click", exportSvg);
+  byId("export-svg").addEventListener("click", () => afterFonts(exportSvg));
   byId("save-project").addEventListener("click", saveProjectFile);
   byId("project-upload").addEventListener("change", (event) => {
     openProjectFile(event.target.files[0]);
@@ -1599,7 +1601,7 @@
   });
   byId("start-over").addEventListener("click", startOver);
   window.addEventListener("pagehide", autosave);
-  byId("export-png").addEventListener("click", exportPng);
+  byId("export-png").addEventListener("click", () => afterFonts(exportPng));
   byId("insert-photopea").addEventListener("click", insertInPhotopea);
 
   window.addEventListener("message", (event) => {
@@ -1726,9 +1728,28 @@
   }
   // Bundled fonts arrive as data (fonts.js), so they also work offline and
   // from a downloaded copy. Text is re-measured once they are ready.
+  function fontsDone() {
+    fontsSettled = true;
+    fontWaiters.splice(0).forEach((action) => action());
+  }
+
+  // An export using a bundled font waits until the font data has arrived and
+  // the text has been re-measured with it, so the file embeds the right font.
+  function afterFonts(action) {
+    if (fontsSettled || !state.bubbles.some((bubble) => bundledFamilies.includes(bubble.fontFamily))) {
+      action();
+      return;
+    }
+    toast("Loading fonts…");
+    if (!fontWaiters.includes(action)) fontWaiters.push(action);
+  }
+
   function registerFonts() {
     const faces = window.SpeechbubbleFonts;
-    if (!Array.isArray(faces) || typeof window.FontFace !== "function" || !document.fonts) return;
+    if (!Array.isArray(faces) || typeof window.FontFace !== "function" || !document.fonts) {
+      fontsDone();
+      return;
+    }
     Promise.all(faces.map((face) => {
       const font = new window.FontFace(face.family, `url(data:font/woff2;base64,${face.data})`, {
         weight: face.weight, style: face.style, unicodeRange: face.unicodeRange
@@ -1739,6 +1760,7 @@
       layoutCache.clear();
       renderCanvas();
       syncInspector();
+      fontsDone();
     });
   }
 
@@ -1750,6 +1772,8 @@
     const script = document.createElement("script");
     script.src = `fonts.js${assetQuery}`;
     script.onload = registerFonts;
+    // Without the data, exports fall back to the browser's fonts.
+    script.onerror = fontsDone;
     document.head.appendChild(script);
   }
 

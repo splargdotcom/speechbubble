@@ -410,3 +410,28 @@ test('saved line, shadow and font settings are checked when loaded',()=>{
   assert.equal(layers[1].querySelectorAll('pattern').length,1);
   assert.equal(layers[1].querySelectorAll('text')[0].getAttribute('font-family'),'Arial');
 });
+
+test('an export made before the font data arrives waits for it, then embeds the font',async()=>{
+  const e=editor();
+  e.change('font-family','Bangers');
+  e.ids['export-svg'].click();
+  assert.equal(e.downloads.length,0);
+  assert.match(e.ids.toast.textContent,/Loading fonts/);
+  const script=e.document.head.children.find(n=>n.tagName==='script'&&/^fonts\.js/.test(n.src));
+  e.window.SpeechbubbleFonts=[{family:'Bangers',weight:'400',style:'normal',unicodeRange:'U+0000-00FF',data:'QkFOR0VSUw=='}];
+  script.onload();
+  assert.equal(e.downloads.length,1);
+  assert.match(await e.downloads[0].text(),/Bangers[^}]*base64,QkFOR0VSUw==/);
+  e.ids['export-svg'].click();
+  assert.equal(e.downloads.length,2,'later exports are immediate');
+});
+
+test('exports without bundled fonts never wait, even if the font data fails to load',()=>{
+  const e=editor();
+  e.ids['export-svg'].click();
+  assert.equal(e.downloads.length,1);
+  e.change('font-family','Patrick Hand');
+  e.document.head.children.find(n=>n.tagName==='script').onerror();
+  e.ids['export-svg'].click();
+  assert.equal(e.downloads.length,2);
+});
