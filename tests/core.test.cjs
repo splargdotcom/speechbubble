@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const context = { window: {} };
-for (const file of ['geometry.js', 'editor-state.js', 'native-shape.js', 'photopea.js']) {
+for (const file of ['geometry.js', 'editor-state.js', 'native-shape.js', 'line-style.js', 'photopea.js']) {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
 }
 const G = context.window.BubbleGeometry;
@@ -142,4 +142,47 @@ test('native PSD encodes two independent Combine contours and valid image dimens
     }
   }
   assert.deepEqual(counts, [4, 4]);
+});
+
+const L = context.window.SpeechbubbleLines;
+
+test('drawn line styles stay finite, keep sharp points and wobble the same way for the same seed', () => {
+  for (const style of ['speech', 'thought', 'shout']) {
+    for (const lineStyle of ['hand', 'brush']) {
+      const result = L.styled(G.bodyPath({ ...base, style }), { style: lineStyle, width: 5, seed: 42 });
+      assert.doesNotMatch(result.centre + result.ribbon, /NaN|Infinity/);
+      assert.ok(result.ribbon.length > 0);
+    }
+  }
+  const path = G.bodyPath(base);
+  const hand = L.styled(path, { style: 'hand', width: 5, seed: 42 });
+  assert.match(hand.centre, /\b700 650\b/);
+  assert.notEqual(hand.centre, path);
+  assert.equal(L.styled(path, { style: 'hand', width: 5, seed: 42 }).centre, hand.centre);
+  assert.notEqual(L.styled(path, { style: 'hand', width: 5, seed: 43 }).centre, hand.centre);
+  assert.equal(L.styled(path, { style: 'brush', width: 5, seed: 42 }).centre, path);
+  const clean = L.styled(path, { style: 'clean', width: 5, seed: 42 });
+  assert.equal(clean.centre, path);
+  assert.equal(clean.ribbon, null);
+  assert.equal(L.styled(path, { style: 'hand', width: 0, seed: 42 }).ribbon, null);
+});
+
+test('brush ink is heavier on the shadow side', () => {
+  const ribbon = L.styled(G.circlePath({ x: 0, y: 0, radius: 100 }), { style: 'brush', width: 10, seed: 1 }).ribbon;
+  const [outer, inner] = ribbon.split(' Z ').map((loop) => loop.replace(/[MZ]/g, '').trim().split(' L ').map((pair) => pair.split(' ').map(Number)));
+  const thickness = (angle) => {
+    const radius = (points) => Math.max(...points.filter(([x, y]) => Math.abs(Math.atan2(y, x) - angle) < 0.05).map(([x, y]) => Math.hypot(x, y)));
+    const innerRadius = (points) => Math.min(...points.filter(([x, y]) => Math.abs(Math.atan2(y, x) - angle) < 0.05).map(([x, y]) => Math.hypot(x, y)));
+    return radius(outer) - innerRadius(inner);
+  };
+  assert.ok(thickness(Math.PI / 4) > 15, 'lower right is heavy');
+  assert.ok(thickness(-3 * Math.PI / 4) < 4, 'upper left is light');
+});
+
+test('a hand-drawn outline converts to native Photopea contours', () => {
+  const S = context.window.SpeechbubbleShape;
+  const paths = G.editablePaths({ ...base, shape: 'rounded' }).map((path, part) => L.styled(path, { style: 'hand', width: 4, seed: 9, part }).centre);
+  assert.equal(paths.length, 2);
+  paths.forEach((path) => S.knots(path).flat().forEach((value) => assert.ok(Number.isFinite(value))));
+  assert.ok(S.psd(paths, { x: 300, y: 150, width: 700, height: 560 }, '#ffffff').length > 100);
 });

@@ -323,3 +323,90 @@ test('when storage is too full for the bubbles, the stored image makes room for 
   assert.equal(JSON.parse(storage.getItem('speechbubble:project')).bubbles[0].text,'HELLO');
   assert.match(e.ids.toast.textContent,/too large to keep/);
 });
+
+const shape=(e,cls)=>e.ids.canvas.querySelectorAll('.bubble-layer')[0].querySelectorAll(cls);
+
+test('the thickness slider sets any line weight',()=>{
+  const e=editor();
+  e.change('stroke-width','9','input');
+  assert.equal(body(e).getAttribute('stroke-width'),'9');
+  assert.equal(String(e.ids['stroke-width-output'].textContent),'9');
+  e.change('stroke-width','0','input');
+  assert.equal(body(e).getAttribute('stroke-width'),'0');
+});
+
+test('hand-drawn and brush lines draw a filled line, and Redraw changes the wobble undoably',()=>{
+  const e=editor(); const clean=body(e).getAttribute('d');
+  assert.equal(shape(e,'.bubble-line').length,0);
+  assert.equal(e.ids['redraw-field'].className.includes('is-hidden'),true);
+  e.change('line-style','hand');
+  assert.equal(shape(e,'.bubble-line').length,1);
+  assert.equal(body(e).getAttribute('stroke'),null);
+  const wobbly=body(e).getAttribute('d');
+  assert.notEqual(wobbly,clean);
+  assert.equal(e.ids['redraw-field'].className.includes('is-hidden'),false);
+  e.ids['redraw-line'].click();
+  assert.notEqual(body(e).getAttribute('d'),wobbly);
+  e.ids.undo.click();
+  assert.equal(body(e).getAttribute('d'),wobbly);
+  e.change('line-style','brush');
+  assert.equal(body(e).getAttribute('d'),clean);
+  assert.equal(shape(e,'.bubble-line').length,1);
+  e.ids['bubble-style'].fire('click',{target:e.ids['bubble-style'].querySelectorAll('button')[1]});
+  assert.equal(shape(e,'.bubble-line').length,4,'thought dots get drawn lines too');
+});
+
+test('solid and halftone shadows sit behind the bubble in the outline colour',()=>{
+  const e=editor(); e.change('stroke-colour','#123456','input');
+  assert.equal(shape(e,'.bubble-shadow').length,0);
+  e.change('bubble-shadow','solid');
+  const shadow=shape(e,'.bubble-shadow')[0];
+  assert.equal(shadow.getAttribute('fill'),'#123456');
+  assert.match(shadow.getAttribute('transform'),/^translate\((\d+) \1\)$/);
+  const layer=e.ids.canvas.querySelectorAll('.bubble-layer')[0];
+  assert.ok(layer.children.indexOf(shadow)<layer.children.indexOf(body(e)),'shadow is drawn first');
+  e.change('bubble-shadow','halftone');
+  const pattern=shape(e,'pattern')[0];
+  assert.equal(shape(e,'.bubble-shadow')[0].getAttribute('fill'),`url(#${pattern.getAttribute('id')})`);
+  assert.equal(pattern.querySelectorAll('circle')[0].getAttribute('fill'),'#123456');
+});
+
+test('Photopea insertion keeps a hand-drawn outline and explains that shadows stay behind',()=>{
+  const e=editor(true); e.change('line-style','hand'); e.change('bubble-shadow','solid');
+  e.ids['insert-photopea'].click();
+  assert.doesNotMatch(e.ids.toast.textContent||'',/Could not prepare/);
+  const token=e.scripts[0].script.match(/(speechbubble:id-\d+):ready:/)[1];
+  e.message(token+':ready:'+JSON.stringify({index:0,count:1,name:'Test',source:'local,test'}));
+  e.message('done'); e.message('done'); e.message('done');
+  e.message(token+':shaped'); e.message('done'); e.message(token+':inserted');
+  assert.match(e.ids.toast.textContent,/shadow isn't included/);
+});
+
+test('exports embed only the bundled fonts the bubbles use',async()=>{
+  const fonts=[{family:'Patrick Hand',weight:'400',style:'normal',unicodeRange:'U+0000-00FF',data:'UEFUUklDSw=='},{family:'Bangers',weight:'400',style:'normal',unicodeRange:'U+0000-00FF',data:'QkFOR0VSUw=='}];
+  const e=editor(false,{fonts});
+  e.ids['export-svg'].click();
+  assert.doesNotMatch(await e.downloads.at(-1).text(),/@font-face/);
+  e.change('font-family','Patrick Hand');
+  assert.equal(e.ids.canvas.querySelectorAll('text')[0].getAttribute('font-family'),'Patrick Hand');
+  e.ids['export-svg'].click();
+  const svg=await e.downloads.at(-1).text();
+  assert.match(svg,/@font-face\{font-family:(?:"|&quot;)Patrick Hand(?:"|&quot;)[^}]*base64,UEFUUklDSw==/);
+  assert.doesNotMatch(svg,/Bangers/);
+});
+
+test('saved line, shadow and font settings are checked when loaded',()=>{
+  const storage=memoryStorage();
+  storage.setItem('speechbubble:project',JSON.stringify({app:'speechbubble',canvas:{width:1200,height:800},bubbles:[
+    {id:'a',text:'A',strokeWidth:99,lineStyle:'evil',shadow:'x',seed:-5,fontFamily:'Bangers'},
+    {id:'b',text:'B',strokeWidth:6.6,lineStyle:'hand',shadow:'halftone',seed:77,fontFamily:'Wingdings'}]}));
+  const e=editor(false,{storage});
+  const layers=e.ids.canvas.querySelectorAll('.bubble-layer');
+  assert.equal(layers[0].querySelectorAll('.bubble-body')[0].getAttribute('stroke-width'),'24');
+  assert.equal(layers[0].querySelectorAll('.bubble-line').length,0);
+  assert.equal(layers[0].querySelectorAll('.bubble-shadow').length,0);
+  assert.equal(layers[0].querySelectorAll('text')[0].getAttribute('font-family'),'Bangers');
+  assert.equal(layers[1].querySelectorAll('.bubble-line').length,1);
+  assert.equal(layers[1].querySelectorAll('pattern').length,1);
+  assert.equal(layers[1].querySelectorAll('text')[0].getAttribute('font-family'),'Arial');
+});

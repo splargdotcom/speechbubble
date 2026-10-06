@@ -21,6 +21,8 @@ Speechbubble generates its artwork as procedural SVG. Bubbles remain crisp at an
 - Undo and redo edits, including dragging, formatting and background changes.
 - Choose speech, thought or shout styles.
 - Use oval or rounded speech bubbles with adjustable tails.
+- Draw the outline clean, hand-drawn or in brush ink, at any thickness, with an optional solid or halftone-dot shadow.
+- Letter in comic and handwritten fonts (Comic Neue, Patrick Hand, Bangers and Permanent Marker), which work offline and are embedded in exports.
 - Automatically wrap and fit text.
 - Drag and resize individual words, inside or outside the bubble, and split words into pieces.
 - Format text with `**bold**`, `*italic*` and `[colour](#d62828)`.
@@ -46,7 +48,9 @@ To adjust a tail after insertion, expand the inserted group, select **bubble-sha
 
 Keep the destination document open while insertion runs. Temporary import tabs close after a successful transfer. If Photopea reports a timeout or document change, inspect those tabs before retrying; the plugin leaves uncertain imports open to avoid closing your work. Insertion is confirmed only after Photopea acknowledges the copy.
 
-The shape is generated as a small native PSD and the text is imported from SVG. Ordinary **Export SVG** and **Export PNG** retain the seamless artwork for standalone use. Photopea may substitute unavailable fonts; make the same font available there for matching text metrics. Existing smart objects inserted by earlier releases are not converted automatically.
+The shape is generated as a small native PSD and the text is imported from SVG. Ordinary **Export SVG** and **Export PNG** retain the seamless artwork for standalone use. Photopea may substitute unavailable fonts; make the same font available there for matching text metrics.
+
+A hand-drawn outline keeps its wobble in the inserted shape, but Photopea's layer stroke has an even thickness, so hand-drawn and brush-ink thickness variation is not carried over. Shadows are not inserted; add one with **Layer Style → Drop Shadow**. Existing smart objects inserted by earlier releases are not converted automatically.
 
 ## Controls
 
@@ -87,6 +91,8 @@ Then open `http://localhost:8000`. You can also open `index.html` directly.
 - `geometry.js` — procedural bubble, cloud, burst and tail paths.
 - `editor-state.js` — undo/redo snapshots, bounded movement and image sizing.
 - `native-shape.js` — cubic vector contours and the native PSD shape writer.
+- `line-style.js` — hand-drawn and brush-ink outlines.
+- `fonts.js` — bundled comic fonts as data, generated from `fonts/` by `tools/build-fonts.cjs`. See [`fonts/README.md`](fonts/README.md) for sources and licences.
 - `photopea.js` — guarded Photopea import, styling and grouping scripts.
 - `app.js` — canvas interaction, text layout, image loading, saving and export.
 - `speechbubble-photopea.json` — Photopea plugin manifest.
@@ -95,6 +101,13 @@ Then open `http://localhost:8000`. You can also open `index.html` directly.
 - `social-preview.png` — the image shown when the link is shared.
 
 Everything is plain HTML, CSS and JavaScript so it remains easy to host on GitHub Pages and easy to alter without a toolchain.
+
+## Changes in 2.6.0
+
+- **Line** style: clean, hand-drawn (with **Redraw** for a new wobble) or brush ink, which is heavier on the shadow side.
+- **Line thickness** is now a slider from 0 to 24 pixels.
+- **Shadow**: none, solid or halftone dots, in the outline colour.
+- Comic and handwritten fonts: Comic Neue, Patrick Hand, Bangers and Permanent Marker. They are bundled, so they work offline, and exported SVG and PNG files embed the ones they use.
 
 ## Changes in 2.5.0
 
@@ -141,4 +154,4 @@ Tests cover geometry, PSD path operations, undo/redo, image dimensions, editor e
 
 ## License
 
-Distributed under the MIT License. See [`LICENSE`](LICENSE).
+Distributed under the MIT License. See [`LICENSE`](LICENSE). The bundled fonts keep their own licences (SIL Open Font License 1.1 and Apache License 2.0); see [`fonts/README.md`](fonts/README.md).
