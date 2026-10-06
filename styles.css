@@ -416,6 +416,11 @@ code {
   grid-column: 1 / -1;
 }
 
+#redraw-line {
+  min-height: 39px;
+  font-size: 13px;
+}
+
 .colour-field input[type="color"] {
   width: 100%;
   height: 39px;

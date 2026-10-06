@@ -22,7 +22,14 @@
   let photopeaTimer = null;
   let backgroundRequest = 0;
   const photopeaOrigin = "https://www.photopea.com";
-  const fontFamilies = ["Arial", "Georgia", "Comic Sans MS", "Impact", "Courier New", "Verdana"];
+  const bundledFamilies = ["Comic Neue", "Patrick Hand", "Bangers", "Permanent Marker"];
+  const fontFamilies = ["Arial", "Georgia", "Comic Sans MS", "Impact", "Courier New", "Verdana", ...bundledFamilies];
+  let fontsSettled = false;
+  const fontWaiters = [];
+  const Lines = window.SpeechbubbleLines;
+  // app.js?v=… : load fonts.js with the same cache key.
+  const assetQuery = document.currentScript && document.currentScript.src ? new URL(document.currentScript.src).search : "";
+  const newSeed = () => Math.floor(Math.random() * 2147483647);
   const projectKey = "speechbubble:project";
   const backgroundKey = "speechbubble:background";
   let saveTimer = null;
@@ -66,6 +73,9 @@
       fill: "#ffffff",
       stroke: "#171717",
       strokeWidth: 4,
+      lineStyle: "clean",
+      shadow: "none",
+      seed: newSeed(),
       opacity: 100,
       fontFamily: "Arial",
       fontSize: 42,
@@ -437,7 +447,9 @@
   function selectedBubbleBounds(bubble) {
     const shapeScale = bubble.style === "thought" ? 0.6 : 0.5;
     const bendPadding = bubble.style === "speech" ? Math.abs(bubble.tailBend) : 0;
-    const padding = Math.max(8, bubble.strokeWidth / 2 + 5) + bendPadding;
+    // Hand-drawn lines wobble outwards; brush lines are up to twice as thick.
+    const lineReach = bubble.lineStyle === "hand" ? 2 + bubble.strokeWidth : bubble.lineStyle === "brush" ? bubble.strokeWidth : bubble.strokeWidth / 2;
+    const padding = Math.max(8, lineReach + 5) + bendPadding;
     let left = bubble.x - bubble.width * shapeScale - padding;
     let right = bubble.x + bubble.width * shapeScale + padding;
     let top = bubble.y - bubble.height * shapeScale - padding;
@@ -448,6 +460,11 @@
       right = Math.max(right, bubble.tailX + padding);
       top = Math.min(top, bubble.tailY - padding);
       bottom = Math.max(bottom, bubble.tailY + padding);
+    }
+
+    if (bubble.shadow !== "none") {
+      right += shadowOffset(bubble);
+      bottom += shadowOffset(bubble);
     }
 
     // Include dragged words, which may sit outside the bubble.
@@ -520,13 +537,19 @@
     const token = `speechbubble:${uniqueId()}`;
     let shapeUrl;
     try {
-      shapeUrl = binaryDataUrl(window.SpeechbubbleShape.psd(Geometry.editablePaths(bubble), bounds, bubble.fill), "application/octet-stream");
+      // A hand-drawn outline keeps its wobble; the line itself becomes
+      // Photopea's even layer stroke.
+      const paths = Geometry.editablePaths(bubble).map((path, part) => bubble.lineStyle === "hand"
+        ? Lines.styled(path, { style: "hand", width: bubble.strokeWidth, seed: bubble.seed, part }).centre
+        : path);
+      shapeUrl = binaryDataUrl(window.SpeechbubbleShape.psd(paths, bounds, bubble.fill), "application/octet-stream");
     } catch (error) {
       toast("Could not prepare the editable bubble. Try a smaller bubble.");
       return;
     }
     photopeaTransferPending = {
       token, stage: "preparing", destination: null,
+      shadow: bubble.shadow !== "none",
       data: { dataUrl: svgDataUrl(svg), shapeUrl, name: cleanLayerName(bubble.text).slice(0, 80),
         stroke: bubble.stroke, strokeWidth: bubble.strokeWidth, opacity: bubble.opacity,
         width: bounds.width, height: bounds.height }
@@ -604,6 +627,71 @@
     canvas.appendChild(group);
   }
 
+  function shadowOffset(bubble) {
+    return Math.round(Geometry.clamp(Math.min(bubble.width, bubble.height) * 0.035 + bubble.strokeWidth * 0.8, 5, 30));
+  }
+
+  // The body and any thought dots, each restyled for the bubble's line.
+  const outlineCache = new Map();
+  function outlines(bubble) {
+    const paths = [Geometry.bodyPath(bubble)];
+    if (bubble.style === "thought") Geometry.thoughtDots(bubble).forEach((dot) => paths.push(Geometry.circlePath(dot)));
+    return paths.map((path, part) => {
+      const key = [bubble.lineStyle, bubble.strokeWidth, bubble.seed, part, path].join("|");
+      let styled = outlineCache.get(key);
+      if (!styled) {
+        if (outlineCache.size >= 400) outlineCache.clear();
+        styled = Lines.styled(path, { style: bubble.lineStyle, width: bubble.strokeWidth, seed: bubble.seed, part });
+        outlineCache.set(key, styled);
+      }
+      return styled;
+    });
+  }
+
+  function renderBubbleShape(group, bubble, index) {
+    const shapes = outlines(bubble);
+    const opacity = bubble.opacity / 100;
+    if (bubble.shadow !== "none") {
+      let fill = bubble.stroke;
+      if (bubble.shadow === "halftone") {
+        const spacing = Geometry.clamp(Math.min(bubble.width, bubble.height) * 0.026, 5, 12);
+        const id = `halftone-${index}`;
+        const defs = svgElement("defs");
+        const pattern = svgElement("pattern", { id, width: spacing, height: spacing, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+        pattern.appendChild(svgElement("circle", { cx: spacing / 2, cy: spacing / 2, r: spacing * 0.3, fill: bubble.stroke }));
+        defs.appendChild(pattern);
+        group.appendChild(defs);
+        fill = `url(#${id})`;
+      }
+      const offset = shadowOffset(bubble);
+      shapes.forEach((shape) => group.appendChild(svgElement("path", {
+        class: "bubble-shadow", d: shape.centre, fill, opacity, transform: `translate(${offset} ${offset})`
+      })));
+    }
+    if (bubble.lineStyle !== "hand" && bubble.lineStyle !== "brush") {
+      shapes.forEach((shape, part) => group.appendChild(svgElement("path", {
+        class: part === 0 ? "bubble-body" : "bubble-dot",
+        "data-bubble-id": bubble.id,
+        d: shape.centre,
+        fill: bubble.fill,
+        stroke: bubble.stroke,
+        "stroke-width": bubble.strokeWidth,
+        "stroke-linejoin": "round",
+        "stroke-linecap": "round",
+        opacity
+      })));
+      return;
+    }
+    // A drawn line is a filled ribbon over the fill; group opacity keeps the
+    // overlap from looking darker, as with an ordinary stroke.
+    const body = svgElement("g", { opacity });
+    shapes.forEach((shape, part) => {
+      body.appendChild(svgElement("path", { class: part === 0 ? "bubble-body" : "bubble-dot", "data-bubble-id": bubble.id, d: shape.centre, fill: bubble.fill }));
+      if (shape.ribbon) body.appendChild(svgElement("path", { class: "bubble-line", d: shape.ribbon, fill: bubble.stroke }));
+    });
+    group.appendChild(body);
+  }
+
   function renderCanvas() {
     canvas.replaceChildren();
     canvas.setAttribute("viewBox", `0 0 ${state.canvas.width} ${state.canvas.height}`);
@@ -632,37 +720,12 @@
       }));
     }
 
-    state.bubbles.forEach((bubble) => {
+    state.bubbles.forEach((bubble, index) => {
       const group = svgElement("g", {
         class: "bubble-layer",
         "data-bubble-id": bubble.id
       });
-      const path = svgElement("path", {
-        class: "bubble-body",
-        "data-bubble-id": bubble.id,
-        d: Geometry.bodyPath(bubble),
-        fill: bubble.fill,
-        stroke: bubble.stroke,
-        "stroke-width": bubble.strokeWidth,
-        "stroke-linejoin": "round",
-        "stroke-linecap": "round",
-        opacity: bubble.opacity / 100
-      });
-      group.appendChild(path);
-
-      if (bubble.style === "thought") {
-        Geometry.thoughtDots(bubble).forEach((dot) => {
-          group.appendChild(svgElement("circle", {
-            cx: dot.x,
-            cy: dot.y,
-            r: dot.radius,
-            fill: bubble.fill,
-            stroke: bubble.stroke,
-            "stroke-width": bubble.strokeWidth,
-            opacity: bubble.opacity / 100
-          }));
-        });
-      }
+      renderBubbleShape(group, bubble, index);
       renderBubbleText(group, bubble);
       canvas.appendChild(group);
     });
@@ -755,7 +818,12 @@
 
     setSegmented("bubble-style", "style", bubble.style);
     byId("bubble-shape").value = bubble.shape;
-    byId("stroke-width").value = String(bubble.strokeWidth);
+    byId("stroke-width").value = bubble.strokeWidth;
+    byId("stroke-width-output").textContent = bubble.strokeWidth;
+    byId("line-style").value = bubble.lineStyle;
+    byId("bubble-shadow").value = bubble.shadow;
+    byId("redraw-field").classList.toggle("is-hidden", bubble.lineStyle !== "hand");
+    byId("shadow-field").classList.toggle("span-two", bubble.lineStyle !== "hand");
     byId("fill-colour").value = bubble.fill;
     byId("stroke-colour").value = bubble.stroke;
     byId("bubble-opacity").value = bubble.opacity;
@@ -767,7 +835,7 @@
     byId("tail-bend-output").textContent = Math.round(bubble.tailBend);
 
     byId("speech-shape-field").classList.toggle("is-hidden", bubble.style !== "speech");
-    byId("stroke-width-field").classList.toggle("span-two", bubble.style !== "speech");
+    byId("line-style-field").classList.toggle("span-two", bubble.style !== "speech");
     byId("tail-controls").classList.toggle("is-hidden", bubble.style !== "speech");
 
     const index = state.bubbles.findIndex((item) => item.id === bubble.id);
@@ -859,6 +927,8 @@
       fill: source ? source.fill : "#ffffff",
       stroke: source ? source.stroke : "#171717",
       strokeWidth: source ? source.strokeWidth : 4,
+      lineStyle: source ? source.lineStyle : "clean",
+      shadow: source ? source.shadow : "none",
       fontFamily: source ? source.fontFamily : "Arial",
       textColour: source ? source.textColour : "#171717"
     });
@@ -1142,7 +1212,10 @@
       tailBend: number(raw.tailBend, base.tailBend, -140, 140),
       fill: colour(raw.fill, base.fill),
       stroke: colour(raw.stroke, base.stroke),
-      strokeWidth: choice(raw.strokeWidth, [2, 4, 7, 11], base.strokeWidth),
+      strokeWidth: Math.round(number(raw.strokeWidth, base.strokeWidth, 0, 24)),
+      lineStyle: choice(raw.lineStyle, ["clean", "hand", "brush"], base.lineStyle),
+      shadow: choice(raw.shadow, ["none", "solid", "halftone"], base.shadow),
+      seed: Number.isInteger(raw.seed) && raw.seed >= 0 && raw.seed <= 2147483647 ? raw.seed : base.seed,
       opacity: number(raw.opacity, base.opacity, 10, 100),
       fontFamily: choice(raw.fontFamily, fontFamilies, base.fontFamily),
       fontSize: number(raw.fontSize, base.fontSize, 14, 110),
@@ -1318,9 +1391,26 @@
 
   const isProjectFile = (file) => Boolean(file) && (/\.json$/i.test(file.name || "") || file.type === "application/json");
 
+  // Exported files embed the bundled fonts they use, so a PNG made from the
+  // SVG, or the SVG opened elsewhere, shows the same lettering.
+  function embeddedFontCss() {
+    const used = new Set(state.bubbles.map((bubble) => bubble.fontFamily));
+    return (window.SpeechbubbleFonts || []).filter((face) => used.has(face.family)).map((face) =>
+      `@font-face{font-family:"${face.family}";font-weight:${face.weight};font-style:${face.style};unicode-range:${face.unicodeRange};src:url(data:font/woff2;base64,${face.data}) format("woff2")}`
+    ).join("");
+  }
+
   function serialisedSvg() {
     const clone = canvas.cloneNode(true);
     clone.querySelectorAll(".selection-ui").forEach((node) => node.remove());
+    const fontCss = embeddedFontCss();
+    if (fontCss) {
+      const style = svgElement("style");
+      style.textContent = fontCss;
+      const defs = svgElement("defs");
+      defs.appendChild(style);
+      clone.insertBefore(defs, clone.firstChild);
+    }
     clone.setAttribute("xmlns", SVG_NS);
     clone.setAttribute("width", state.canvas.width);
     clone.setAttribute("height", state.canvas.height);
@@ -1399,7 +1489,10 @@
     patchSelected({ fontSize: Number(event.target.value), autoFit: false }, { inspector: true });
   });
   bindSelected("bubble-shape", "change", "shape");
-  bindSelected("stroke-width", "change", "strokeWidth", Number);
+  bindSelected("stroke-width", "input", "strokeWidth", Number, { inspector: true });
+  bindSelected("line-style", "change", "lineStyle", String, { inspector: true });
+  bindSelected("bubble-shadow", "change", "shadow", String);
+  byId("redraw-line").addEventListener("click", () => patchSelected({ seed: newSeed() }));
   bindSelected("fill-colour", "input", "fill");
   bindSelected("stroke-colour", "input", "stroke");
   bindSelected("bubble-opacity", "change", "opacity", (value) => Geometry.clamp(Number(value), 10, 100));
@@ -1500,7 +1593,7 @@
   });
   byId("canvas-width").addEventListener("change", (event) => resizeCanvas(Number(event.target.value), state.canvas.height, false));
   byId("canvas-height").addEventListener("change", (event) => resizeCanvas(state.canvas.width, Number(event.target.value), false));
-  byId("export-svg").addEventListener("click", exportSvg);
+  byId("export-svg").addEventListener("click", () => afterFonts(exportSvg));
   byId("save-project").addEventListener("click", saveProjectFile);
   byId("project-upload").addEventListener("change", (event) => {
     openProjectFile(event.target.files[0]);
@@ -1508,7 +1601,7 @@
   });
   byId("start-over").addEventListener("click", startOver);
   window.addEventListener("pagehide", autosave);
-  byId("export-png").addEventListener("click", exportPng);
+  byId("export-png").addEventListener("click", () => afterFonts(exportPng));
   byId("insert-photopea").addEventListener("click", insertInPhotopea);
 
   window.addEventListener("message", (event) => {
@@ -1516,7 +1609,9 @@
     if (!photopeaMode || !transfer || event.source !== window.parent || event.origin !== photopeaOrigin || typeof event.data !== "string") return;
     const prefix = transfer.token + ":";
     if (event.data === prefix + "inserted" && transfer.stage === "finishing") {
-      finishPhotopeaTransfer("Editable bubble inserted into Photopea");
+      finishPhotopeaTransfer(transfer.shadow
+        ? "Bubble inserted. Its shadow isn't included: add one with Layer Style → Drop Shadow."
+        : "Editable bubble inserted into Photopea");
     } else if (event.data === prefix + "shaped" && transfer.stage === "shaping") {
       transfer.stage = "shaped";
     } else if (event.data.startsWith(prefix + "error:")) {
@@ -1631,6 +1726,58 @@
     document.body.classList.add("photopea-mode");
     byId("insert-photopea").hidden = false;
   }
+  // Bundled fonts arrive as data (fonts.js), so they also work offline and
+  // from a downloaded copy. Text is re-measured once they are ready.
+  function fontsDone() {
+    fontsSettled = true;
+    fontWaiters.splice(0).forEach((action) => action());
+  }
+
+  // An export using a bundled font waits until the font data has arrived and
+  // the text has been re-measured with it, so the file embeds the right font.
+  function afterFonts(action) {
+    if (fontsSettled || !state.bubbles.some((bubble) => bundledFamilies.includes(bubble.fontFamily))) {
+      action();
+      return;
+    }
+    toast("Loading fonts…");
+    if (!fontWaiters.includes(action)) fontWaiters.push(action);
+  }
+
+  function registerFonts() {
+    const faces = window.SpeechbubbleFonts;
+    if (!Array.isArray(faces) || typeof window.FontFace !== "function" || !document.fonts) {
+      fontsDone();
+      return;
+    }
+    Promise.all(faces.map((face) => {
+      const font = new window.FontFace(face.family, `url(data:font/woff2;base64,${face.data})`, {
+        weight: face.weight, style: face.style, unicodeRange: face.unicodeRange
+      });
+      document.fonts.add(font);
+      return font.load().catch(() => null);
+    })).then(() => {
+      layoutCache.clear();
+      renderCanvas();
+      syncInspector();
+      fontsDone();
+    });
+  }
+
+  function loadFonts() {
+    if (window.SpeechbubbleFonts) {
+      registerFonts();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = `fonts.js${assetQuery}`;
+    script.onload = registerFonts;
+    // Without the data, exports fall back to the browser's fonts.
+    script.onerror = fontsDone;
+    document.head.appendChild(script);
+  }
+
   restoreAutosave();
   syncAll();
+  loadFonts();
 }());

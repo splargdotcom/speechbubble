@@ -18,7 +18,7 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Speechbubble: a speech bubble reading WHO'S SORRY NOW?, a thought bubble and a POW! burst.">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="styles.css?v=2.5.1">
+  <link rel="stylesheet" href="styles.css?v=2.6.0">
 </head>
 <body>
   <div class="app-shell">
@@ -82,6 +82,12 @@
                 <option value="Impact">Impact</option>
                 <option value="Courier New">Courier</option>
                 <option value="Verdana">Verdana</option>
+                <optgroup label="Comic and handwritten">
+                  <option value="Comic Neue">Comic Neue</option>
+                  <option value="Patrick Hand">Patrick Hand</option>
+                  <option value="Bangers">Bangers</option>
+                  <option value="Permanent Marker">Permanent Marker</option>
+                </optgroup>
               </select>
             </label>
             <label class="field colour-field">
@@ -134,15 +140,34 @@
                 <option value="rounded">Rounded</option>
               </select>
             </label>
-            <label class="field" id="stroke-width-field">
-              <span>Outline</span>
-              <select id="stroke-width">
-                <option value="2">Fine</option>
-                <option value="4">Regular</option>
-                <option value="7">Heavy</option>
-                <option value="11">Very heavy</option>
+            <label class="field" id="line-style-field">
+              <span>Line</span>
+              <select id="line-style">
+                <option value="clean">Clean</option>
+                <option value="hand">Hand-drawn</option>
+                <option value="brush">Brush ink</option>
               </select>
             </label>
+          </div>
+
+          <div class="range-field">
+            <div class="range-heading"><label for="stroke-width">Line thickness</label><output id="stroke-width-output">4</output></div>
+            <input id="stroke-width" type="range" min="0" max="24" step="1" value="4">
+          </div>
+
+          <div class="field-grid two">
+            <label class="field" id="shadow-field">
+              <span>Shadow</span>
+              <select id="bubble-shadow">
+                <option value="none">None</option>
+                <option value="solid">Solid</option>
+                <option value="halftone">Halftone dots</option>
+              </select>
+            </label>
+            <div class="field" id="redraw-field">
+              <span>Wobble</span>
+              <button class="button button-secondary" id="redraw-line" type="button">↻ Redraw</button>
+            </div>
           </div>
 
           <div class="field-grid three colour-grid">
@@ -233,10 +258,11 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="geometry.js?v=2.5.1"></script>
-  <script src="editor-state.js?v=2.5.1"></script>
-  <script src="native-shape.js?v=2.5.1"></script>
-  <script src="photopea.js?v=2.5.1"></script>
-  <script src="app.js?v=2.5.1"></script>
+  <script src="geometry.js?v=2.6.0"></script>
+  <script src="editor-state.js?v=2.6.0"></script>
+  <script src="native-shape.js?v=2.6.0"></script>
+  <script src="line-style.js?v=2.6.0"></script>
+  <script src="photopea.js?v=2.6.0"></script>
+  <script src="app.js?v=2.6.0"></script>
 </body>
 </html>

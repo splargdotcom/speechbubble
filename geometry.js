@@ -249,6 +249,7 @@
     editablePaths: (bubble) => editablePath(bubble).split(/(?=M )/).map((part) => part.trim()).filter(Boolean),
     clamp,
     textBounds,
-    thoughtDots
+    thoughtDots,
+    circlePath: (dot) => ellipseBody({ x: dot.x, y: dot.y, width: dot.radius * 2, height: dot.radius * 2 })
   };
 }());
